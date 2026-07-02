@@ -13,8 +13,9 @@ makedocs(;
         devurl = "dev",
     ),
     pages=[
-        "Home" => "index.md",
-        "Pluto example" => "pluto_example.md"
+        "Course Overview" => ["General information" => "index.md",
+        "Installation" => "1-2-installation.md",],
+        "NMR/MRI simulation" => ["pluto_example.md",],
     ],
 )
 
