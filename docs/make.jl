@@ -6,9 +6,9 @@ DocMeta.setdocmeta!(EDUC_BiDiM_IRM, :DocTestSetup, :(using EDUC_BiDiM_IRM); recu
 makedocs(;
     modules=[EDUC_BiDiM_IRM],
     authors="aTrotier <a.trotier@gmail.com> and contributors",
-    sitename="EDUC_BiDiM_IRM.jl",
+    sitename="EDUC_BiDiM_IRM",
     format = DocumenterVitepress.MarkdownVitepress(
-        repo = "github.com/CRMSB/EDUC_BiDiM_IRM.jl",
+        repo = "github.com/CRMSB/EDUC_BiDiM_IRM",
         devbranch = "main", # or master, trunk, ...
         devurl = "dev",
     ),
