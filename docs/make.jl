@@ -8,7 +8,7 @@ makedocs(;
     authors="aTrotier <a.trotier@gmail.com> and contributors",
     sitename="EDUC_BiDiM_IRM.jl",
     format = DocumenterVitepress.MarkdownVitepress(
-        repo = "https://CRMSB.github.io/EDUC_BiDiM_IRM.jl",
+        repo = "github.com/CRMSB/EDUC_BiDiM_IRM.jl",
         devbranch = "main", # or master, trunk, ...
         devurl = "dev",
     ),
@@ -18,7 +18,7 @@ makedocs(;
 )
 
 DocumenterVitepress.deploydocs(;
-    repo = "CRMSB.github.io/EDUC_BiDiM_IRM.jl",
+    repo = "github.com/CRMSB/EDUC_BiDiM_IRM.jl",
     target = joinpath(@__DIR__, "build"),
     branch = "gh-pages",
     devbranch = "main",
