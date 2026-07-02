@@ -19,7 +19,7 @@ makedocs(;
 )
 
 DocumenterVitepress.deploydocs(;
-    repo = "github.com/CRMSB/EDUC_BiDiM_IRM.jl",
+    repo = "github.com/CRMSB/EDUC_BiDiM_IRM",
     target = joinpath(@__DIR__, "build"),
     branch = "gh-pages",
     devbranch = "main",
