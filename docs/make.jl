@@ -15,7 +15,7 @@ makedocs(;
     pages=[
         "Course Overview" => ["General information" => "index.md",
         "Installation" => "1-2-installation.md",],
-        "NMR/MRI simulation" => ["Bloch equation" => "pluto_2-1-bloch_equation.md",],
+        "NMR/MRI simulation" => ["Bloch equation" => "2-1-bloch_equation.md",],
     ],
 )
 
