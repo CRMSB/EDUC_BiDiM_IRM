@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
 begin
 	# Layout ..
@@ -20,7 +32,7 @@ begin
 	#Math
 	using LinearAlgebra
 
-	
+	PlutoUI.TableOfContents()
 end
 
 # ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
@@ -41,8 +53,16 @@ html"""
 	</div>
 """
 
+# ╔═╡ 1ec2231e-5457-4940-98bd-ae4b92ce5b0b
+md"""
+# TO DO :
+- traduire correction premère réponse
+"""
+
 # ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
 md"
+
+# 1. Basic of bloch-equation
 NMR signal can be simulated with the bloch equations :
 
 $\frac{d\vec{M}}{dt} = \gamma \vec{M} \times \vec{B}_{ext} + \frac{1}{T_1} (M_0 - M_z)\vec{z} - \frac{1}{T_2} \vec{M}_\perp$
@@ -57,11 +77,8 @@ The idea is to simulate a spin isochromat (a large sample of spin with the same 
 
 # ╔═╡ 9fd5b724-4634-4fd9-b397-bc1e8161394d
 md"
-# Additionnal educational ressources
-"
+**Additionnal educational ressources :**
 
-# ╔═╡ b11589a7-b7d3-46df-b0c2-b3cf84e6deda
-md"
 A really good presentation of bloch equation simulation is also available in **Lecture-03A from Stanford Rad229 course** by Dr. Daniel Ennis. (check also Lecture-01D).
 "
 
@@ -70,7 +87,7 @@ YouTube("zhuc2J6nhvY")
 
 # ╔═╡ 9eede586-5ede-431e-be8c-8dc1a4869b5c
 md"
-## 1. Relaxation
+## 1.1. Relaxation operator
 
 When relaxation occurs 
 
@@ -115,30 +132,27 @@ M_3 = A*M_0
 
 end;
 
-# ╔═╡ 640af8d0-9cb2-42e3-9bcd-64ec64b9e664
-md"
-# 2. Excitation corresponding to rotations along X/Y axis
-Additionnaly an off-resonance effect can be added to this equation :
+# ╔═╡ 3a33ef9b-5948-4270-8c86-941a340a8029
+md"""
+## 1.2. Rotations of the magnetization without relaxation
+"""
 
-$$A2 = zrot(\phi) \times A$$
+# ╔═╡ 3b5c3b6d-15a6-42c7-bae7-2e7a100cd1de
+md"""
+Rotations of the magnetization is used to simulate multiple events:
+- RF excitations that tilt the magnetization along an axis
+- Application of a magnetic gradient correspond to the rotation around the $B_0$-axis
+- Off-resonance that creates $T_2*$ decays or chemical shift
 
-we will use the later notation in order to simulate off-resonance spins and $$T_2^*$$ decays.
-"
+For simplicity we will give you the equation to rotate the magnetization along x,y and z axis (you can verify on wikipedia that the implementation is correct)
+"""
 
-# ╔═╡ 39efa123-c9b3-44fa-a8f2-90fa9aca2be5
-md"
-## 1. Préparation des sous-fonctions
+# ╔═╡ f3d04f2e-1c49-4abd-9fe2-6667dd5233b9
+md"""
+By convention the $B_0$ axis is aligned along the Z-axis but it is a convention. Be careful when you work with DIY magnet
+""" |> warning_box
 
-Préparez les fonctions nécessaires à la simulation du signal IRM :
-
-- xrot(angle), yrot(angle) et zrot(angle) : qui retourne une matrice de rotation à partir d'un angle (en radian)
-- throt(phi,theta) : si l'angle de rotation est transverse (différent de x/y) (utilisez les fonctions précédentes : $Rth(phi,theta)=Rz(theta)*Rx(phi)*Rz(-theta)$)
-- freeprecess(T,T1,T2,df) : calcul des opérateurs de relaxation en fonction du T1 et T2, de l'off-resonance de l'isochromat df durant un délai T
-
-Validez que les fonctions fonctionnes bien (affichage d'une flèche avant et après rotation par exemple)
-"
-
-# ╔═╡ ec1640b8-1a05-4892-a192-8d8a22850e9c
+# ╔═╡ 638256aa-ef09-4afe-92ee-4ac9939a0f5d
 begin
 	#--------------------------------------------------------
 	#  By convention all rotations are left-handed
@@ -179,84 +193,290 @@ begin
 	    s = sin(angle)    
 	    M = [[c,-s,0,0] [s,c,0,0] [0,0,1,0] [0,0.0,0.0,1]]'
 	end
-	
-	""" freeprecess(t,T1 = 2000, T2 = 100, df = 0)
-	
-	Returns A function as a 4x4 matrix for freeprecession
-	"""
-	function freeprecess(t,T1 = 2000, T2 = 100, df = 0)
-	    T1 = T1 * 1.
-	    T2 = T2 * 1.
-	    t = t * 1.
-	    
-	    phi = 2*pi*df*t/1000
-	    E1 = exp(-t/T1)
-	    E2 = exp(-t/T2)
-	    A = diagm([E2, E2, E1,1])
-		A[3,4] = 1-E1
-		A = zrot(phi,false)*A
-	    
-		return A
-	end
 end;
 
+# ╔═╡ ec03551b-649c-4f33-9ccf-315f4f18968b
+md"""
+A good way to see if it works correctly is to plot an arrow. We will use the package `Makie.jl`. 
 
-# ╔═╡ 32c3762e-22d6-4b9e-b050-61a3202cd1f2
-md"### Prepare some plot functions"
+You can learn more about it here : https://docs.makie.org/stable/
 
-# ╔═╡ abb59cbd-e958-4d38-9ed6-dac4ae551cd6
-""" plot_magnetization(M::Matrix{<:Real};title="")
-
-M::Matrix{<:Real} : Magnetization vector of size 3(or 4)xN where N is the number of steps
-
-Keywords :
-- title of plots
+You can play with the magnetization vector Marrow :
 """
-function plot_magnetization(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
-	f=Figure()
-	ax = Axis(f[1,1],title=title)
-	lines!(ax,M[1,:],label = "Mx")
-	lines!(ax,M[2,:],label = "My")
-	lines!(ax,M[3,:],label = "Mz")
-	ax.xlabel= xlabel
-	ax.ylabel="Mangnetization [ms]"
-	axislegend()
-	return f,ax
+
+# ╔═╡ 93df9818-a58b-4118-a612-7887d2aff92f
+begin
+	M_arrow = [0,0,1,1]
+	alpha = yrot(80.0,true)
+
+	M_arrow = alpha * M_arrow
+
+	# You can also apply recovery : 
+	A2 = recovery(50,1000.0,50)
+
+	M_arrow = A2 * M_arrow
+	
 end
 
+# ╔═╡ c3091f3d-cde9-4a25-a7c5-a3790f9eaf90
+begin
+	f = Figure()
+	ax = Axis3(f[1,1],title = "Magnetisation vector")
+	arrows3d!(ax,(0,0,0),tuple(M_arrow[1:3]...),
+			  tiplength=0.2,tipradius=0.1,
+			  color=:red)
+	
+	xlims!(ax,(-1,1))
+	ylims!(ax,(-1,1))
+	zlims!(ax,(-1,1))
+	f
+end
+
+# ╔═╡ c3876124-7c0a-4442-a8fa-ee51f144cc9e
+md"""
+Actually, the off-resonance effect is simulated along side the recovery. To do so we can apply a rotation along the z-axis right after the recovery step.
+
+The off-resonance is generally defined in hertz. For example at 3T, the off-resonance between the water and fat is -440 Hz.
+"""
+
+# ╔═╡ f8648cfe-01a9-4dff-a5ce-e980ef80a74e
+md"""
+## 1.3. Free precession operator
+"""
+
+# ╔═╡ fdd6c0dc-cba1-4b30-9f85-8e6f7057d971
+md"""
+Let's write an operator called `freeprecess(dt,T1,T2,df)` that perform both the recovery and the off-resonance.
+"""
+
+# ╔═╡ dff72c32-7972-4c7b-95f0-834b1615bcb7
+begin
+""" freeprecess(t,T1 = 2000, T2 = 100, df = 0)
+	
+Returns A function as a 4x4 matrix for freeprecession
+"""
+function freeprecess(t,T1 = 2000, T2 = 100, df = 0)
+	T1 = T1 * 1.
+	T2 = T2 * 1.
+	t = t * 1.
+	
+	phi = 2*pi*df*t/1000
+	E1 = exp(-t/T1)
+	E2 = exp(-t/T2)
+	A = diagm([E2, E2, E1,1])
+	A[3,4] = 1-E1
+	A = zrot(phi,false)*A
+	
+	return A
+end
+end;
+
+# ╔═╡ fc021473-d9cf-48d8-aa2a-fb84579c50b2
+md"""
+In order to see how the magnetization evoluate, we will apply create an operator with a small `dt` and apply it multiple times. 
+""" 
+
+# ╔═╡ 34dffba7-b26b-4754-9687-e102cb414771
+md"""
+For the answer we will use a slider to change the off-resonance value 
+"""
+
+# ╔═╡ 6cbba238-3bec-42a8-ac99-2c85647dc249
+@bind df_slider PlutoUI.Slider(-25:1:25, default=10, show_value=true)
+
+# ╔═╡ 1f7826fc-dcb0-421f-b4e4-48833da4d36f
+begin
+	function simuFID(df,dT,T,N::Int,T1,T2)
+    ## Simulation with offresonance 
+    A = freeprecess(dT,T1, T2, df)
+    # Simulate the decay
+	M = zeros(Float64,4,N)
+    # initiliaze aimantation along x (like flip angle 90°)
+    M[:,1] = [0,0,1,1]
+    M[:,1] = xrot(pi/2) * M[:,1]
+    # propagate the relaxation along the time
+    for k in range(1, N-1)
+      M[:,k+1] = A * M[:,k]
+	end
+	return M
+    end
+
+    # definition of parameters
+    df = 0
+	dT = 1
+	T = 1000
+	N = Int(ceil(T/dT))+1
+	T1 = 600
+	T2 = 100
+    
+    M_hz= simuFID(df_slider,dT,T,N,T1,T2)
+
+    # Let's plot the results
+    """ plot_magnetization(M::Matrix{<:Real};title="")
+
+    M::Matrix{<:Real} : Magnetization vector of size 3(or 4)xN where N is the number of steps
+    
+    Keywords :
+    - title of plots
+    """
+    function plot_magnetization(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
+    	f=Figure()
+    	ax = Axis(f[1,1],title=title)
+    	lines!(ax,M[1,:],label = "Mx")
+    	lines!(ax,M[2,:],label = "My")
+    	lines!(ax,M[3,:],label = "Mz")
+    	ax.xlabel= xlabel
+    	ax.ylabel="Mangnetization [ms]"
+    	axislegend()
+    	return f,ax
+    end
+end;
+
 # ╔═╡ dcad004e-6399-43fe-a02f-4109af02de30
-md"
-## 2. Signal de précession libre
+md"""
+# 2. Simulate sequence
 
-Simuler 2 signaux de precession libre (correspondant à l'évolution du signal après une impulsion radiofréquence)  avec une valeur d'off-resonance de 0 ou 10 Hz :
+In the next section we will simulate multiple sequences :
+- Gradient Echo
+- Spin-Echo
 
-- angle = $$\frac{\pi}{2}$$ correspondant à une aimantation de départ selon l'axe 
+We will visualize how to optimize the choice of some parameters to change the contrast and we will talk about advanced effects like : 
+- dummy scans
+- steady-state
+- spoiling
+"""
 
-$$\vec{M} = \begin{bmatrix}
-  0\\ 
-  1\\
-  0 \\
-  0
-  \end{bmatrix}$$  
+# ╔═╡ 3671f3e4-0556-4453-83cb-e718fa294241
+md"""
+## 2.1. Gradient echo
 
-- Pas de simulation : 1 ms
-- Durée de simulation : 1000 ms
-- Off-resonance : 0 ou 10 Hz
-- T1 = 600 ms
-- T2 = 100 ms
+Our goal it to simulate the value of the signal for a gradient echo sequence. We need to see the magnetization vector at a specific time-point called Echo Time (TE).
 
-**Expliquez la différence entre les 2 simulations ?**
-"
+To display how a sequence work we generally use a chronogram that represent how are played the events (gradient, RF, ADC) of a sequence along the time by the MRI scanner.
 
+![gre](https://mrsd.readthedocs.io/en/latest/_images/flash1.png)
+
+During this notebook we will not take into account the gradient. What is important is that we will read the signal at the TE and repeat the RF pulse for every repetition time (TR).
+"""
+
+# ╔═╡ f199d95f-5656-4646-a774-a38bba6ceb68
+begin
+	df_2 = 0	# Hz off-resonance.
+	T1_2 = 1400	# ms.
+	T2_2 = 200	# ms.
+	TE_2 = 1    #ms
+	TR_2 = 100     #ms
+	alpha_2 = pi/3      #deg
+	Nex_2 = 50	# 20 excitations.
+
+	# define usefull matrix
+	Rflip = yrot(alpha_2)
+	Atr = freeprecess(TR_2,T1_2, T2_2, df_2)
+	Ate = freeprecess(TE_2,T1_2, T2_2, df_2)
+	Ate_50hz = freeprecess(TE_2,T1_2, T2_2, 50)
+	
+	M0_ge = [0,0,1,1] # initialize along Z
+	M_ge_tr1_0hz = Rflip * M0_ge # magnetization after flip
+	M_ge_tr1_0hz = Ate * M_ge_tr1_0hz # relaxation to TE
+
+	Mxy_tr1_0hz = sqrt(M_ge_tr1_0hz[1]^2+M_ge_tr1_0hz[2]^2)
+	
+	# with df = 10
+	M_ge_tr1_50hz = Rflip * M0_ge # magnetization after flip
+	M_ge_tr1_50hz = Ate_50hz * M_ge_tr1_50hz # relaxation to TE
+	Mxy_tr1_50hz = sqrt(M_ge_tr1_50hz[1]^2+M_ge_tr1_50hz[2]^2)
+
+	#println(Mxy_tr1_0hz)
+	#println(Mxy_tr1_50hz)
+end;
+
+# ╔═╡ 2a4fbac6-7da9-4719-84c0-75b2242b2ca4
+begin
+    function simuEchoDeGradient(df,alpha,TE,TR,NEX,T1,T2,spoiler = false)
+        Mte = zeros(Float32,4, NEX) # store magnetization for each TE
+    
+        Ate = freeprecess(TE,T1, T2, df)
+        Atr = freeprecess(TR,T1, T2, df)
+    
+    
+        Rflip = yrot(alpha,true)
+        # initiliaze aimantation along z
+        M_tmp = [0,0,1,1]
+    
+        Mcount=1
+        for n in range(1,NEX)
+            M_tmp = Rflip * M_tmp
+            Mte[:,n] = Ate * M_tmp
+            M_tmp = Atr * M_tmp
+            if spoiler
+                M_tmp[1:2] .= 0 
+            end
+    	end
+        return Mte
+    end
+
+    Mte_alpha10 = simuEchoDeGradient(df_2,10,TE_2,TR_2,Nex_2,T1_2,T2_2)
+    Mte_alpha30 = simuEchoDeGradient(df_2,30,TE_2,TR_2,Nex_2,T1_2,T2_2)
+    Mte_alpha60 = simuEchoDeGradient(df_2,60,TE_2,TR_2,Nex_2,T1_2,T2_2)
+
+    function mag(M)
+        return [sqrt(M[1,i]^2+M[2,i]^2) for i in 1:size(M,2)]
+    end
+    
+    
+    f2 = Figure()
+    ax2 = Axis(f2[1,1], title = "Steady-state")
+    lines!(ax2, mag(Mte_alpha10),label = "alpha = 10°")
+    lines!(ax2, mag(Mte_alpha30),label = "alpha = 30°")
+    lines!(ax2, mag(Mte_alpha60),label = "alpha = 60°")
+    Legend(f2[1,2],ax2)
+    f2
+    
+    
+end;
+
+# ╔═╡ a421da06-8174-4852-9a94-b1f96c0a9b88
+md"""
+Let's do the same simulation / plot but this time we will apply a **spoiler** at the end of each TR.
+
+Applying a spoiler means that we want Mx=My=0
+"""
+
+# ╔═╡ d50f4ef4-a9e3-4cfa-949c-4533fc274652
+begin
+    
+        Mte_alpha10_spoil = simuEchoDeGradient(df_2,10,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
+        Mte_alpha30_spoil = simuEchoDeGradient(df_2,30,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
+        Mte_alpha60_spoil = simuEchoDeGradient(df_2,60,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
+        
+        f3 = Figure()
+        ax3 = Axis(f3[1,1], title = "Spoiled Steady-state")
+        lines!(ax3, mag(Mte_alpha10_spoil),label = "alpha = 10°")
+        lines!(ax3, mag(Mte_alpha30_spoil),label = "alpha = 30°")
+        lines!(ax3, mag(Mte_alpha60_spoil),label = "alpha = 60°")
+        Legend(f3[1,2],ax2)
+        f3
+end
+
+# ╔═╡ 4b860561-2dc1-4890-bbaf-1a7f02819d6e
+md"""
+The curves are now a lot smoother and we changed the value are lowered.
+Another intersting point is that the steady-state value is higher for alpha = 30° thant alpha = 10° in this case.
+
+The first simulation was a **FISP** sequence and the second is called a *Spoiled gradient echo**.
+
+We will see more clearly what happens in a dedicated chapter on spoiling mecanism and gradient echo sequences.
+"""
 
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
 md"""
-# Helping functions
+# Helper functions
 """
 
 # ╔═╡ 54e96133-f840-41ee-bac5-db8dc7c196f3
 begin
     hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]));
+    note(text) = Markdown.MD(Markdown.Admonition("note", "note", [text]));
 	answer_blurred(text) = Markdown.MD(Markdown.Admonition("tip", "Answer", [text]));
 	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]));
     green_folded(title, text) = @htl("""
@@ -293,7 +513,7 @@ $$M_2 = A_2 A_1 M_0$$
 """ |> hint
 
 # ╔═╡ 67483df1-8124-48f0-8336-632186abc9fa
-green_folded("Correction",
+green_folded("Answer",
  md"""
 Pour prouver que la formulation $3 \times 3$ affine ($A\vec{M} + B$) et la formulation homogène $4 \times 4$ sont strictement équivalentes après deux étapes consécutives, il suffit de développer le produit matriciel de la méthode $4 \times 4$ et de le projeter sur l'espace $3 \times 3$.
 
@@ -301,7 +521,7 @@ Voici la démonstration mathématique étape par étape, rédigée de manière �
 
 ---
 
-## Démonstration de l'équivalence
+**Démonstration de l'équivalence**
 
 Soit le vecteur de magnétisation augmenté à 4 dimensions :
 
@@ -319,7 +539,7 @@ A & B \\
 
 Où $A = \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}$, $B = \begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix}$, et $\mathbf{0}^T = \begin{bmatrix} 0 & 0 & 0 \end{bmatrix}$.
 
-### 1. Application successive avec la méthode $4 \times 4$
+**1. Application successive avec la méthode $4 \times 4$**
 
 Pour deux étapes de relaxation successives ($1$ puis $2$), on multiplie les opérateurs matriciels :
 
@@ -348,7 +568,7 @@ A_2 A_1 & A_2 B_1 + B_2 \\
 \mathbf{0}^T & 1
 \end{bmatrix}$$
 
-### 2. Application au vecteur initial
+**2. Application au vecteur initial**
 
 En appliquant ce résultat au vecteur augmenté initial $\vec{M}_0$, on obtient :
 
@@ -360,7 +580,7 @@ A_2 A_1 & A_2 B_1 + B_2 \\
 
 $$\vec{M}_2 = \begin{bmatrix} A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2 \\ 1 \end{bmatrix}$$
 
-### Conclusion
+**Conclusion**
 
 La composante 3D (les 3 premières lignes) du vecteur d'état final donne explicitement :
 
@@ -370,10 +590,6 @@ $$\vec{M}(2) = A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2$$
 Ce résultat est **strictement identique** à l'expression obtenue avec la méthode standard $3 \times 3$ développée dans ton indice ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
 
 La formulation $4 \times 4$ permet donc d'encapsuler la translation (le terme $B$ lié à la récupération $T_1$) directement dans une seule multiplication matricielle, ce qui est beaucoup plus efficace pour enchaîner les événements (RF, gradients, relaxation) dans un simulateur Bloch.
-
----
-
-Tu peux encapsuler cette réponse dans ta fonction `answer_folded_green` pour l'intégrer proprement à ton notebook Pluto !
 			 
  """)
 
@@ -434,10 +650,145 @@ For **dt = 500 ms** : $M =$ $(latexify_md(M_2))
 
 For **dt = 5000 ms** :$M =$ $(latexify_md(M_3))
 
-## Interpretation
+**Interpretation**
+			 
 For 600 ms and 5s,  almost all the magnetization along the Y axis is gone )  due to the $T_2$ decays (dt > 5 * $T_2$).
 
 For dt = 5 s, the magnetization is almost back at the state where all the magnetization is along the $B_0$ axis because dt > 5 * $T_1$)
+""")
+
+# ╔═╡ a564a238-d7b8-4e61-9827-920805e675bb
+md"""
+What happens if we apply a rotation along the Z-axis at the equilibrium M = [0,0,1,1] ?
+""" |> question
+
+# ╔═╡ d59ad369-c95c-462d-90a3-2bf47780aed3
+green_folded("Answer",
+md"""
+Nothing, you can verify with the code.
+""")
+
+# ╔═╡ 0f03a903-fcd4-4a42-829b-e612f79bf6f1
+md"""
+What is the relation between the time step dt used in the recovery function and the angle along the z axis that we should apply ?
+""" |> question
+
+# ╔═╡ 9e19225b-fcea-43c4-ae5e-701d87e67396
+green_folded("Answer",
+md"""
+The relation is between the off-resonance (in ms) and the angle in radiant is :
+			 
+$$\phi = 2 * \pi * \frac{df}{1000}$$
+
+The division by 1000 is used to convert in seconds.			 
+""")
+
+# ╔═╡ 5265d9da-a2ae-4cda-be3b-ca7dc50de002
+md"""
+Simulate 2 free precession signal (corresponding to the signal evolution after a radiofrequency pulse of 90° around the X axis) and do it for 2 off-resonances value : 0 and 10 Hz.
+
+Plot the $M_x$, $M_y$ and $M_z$ for each time point :
+
+```
+- dt : 1 ms
+- Duration of simulation : 1000 ms
+- Off-resonance : 0 ou 10 Hz
+- T1 = 600 ms
+- T2 = 100 ms
+```
+
+	
+**You need to store the magnetization vector for time each step, you can initialie a vector with : `M = zeros(Float64,4,N)`**.
+
+""" |> question
+
+# ╔═╡ 8a82299c-822c-4b7a-9a38-004969977dbc
+md""""
+For the plot you can use the following code :
+
+```julia
+function plot_mag(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
+	f=Figure()
+	ax = Axis(f[1,1],title=title)
+	lines!(ax,M[1,:],label = "Mx")
+	lines!(ax,M[2,:],label = "My")
+	lines!(ax,M[3,:],label = "Mz")
+	ax.xlabel= xlabel
+	ax.ylabel="Mangnetization [ms]"
+	axislegend()
+	return f,ax
+end
+```
+	
+""" |> hint
+
+# ╔═╡ ebd0f73a-5eda-4d8c-be35-4daefc7be84e
+green_folded("Answer",
+ md"""
+ $(plot_magnetization(M_hz)[1])
+ """)
+
+# ╔═╡ fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
+md"""
+For the rest of this notebook we will only use the rotation (xrot, yrot, zrot) and freeprecess function.
+
+You can also use for the plot the function : 			
+	
+	plot_magnetization(M::Matrix{<:Real};title="")
+	
+""" |> note
+
+# ╔═╡ ab402fdd-e368-458f-afb0-ae0655c5dd50
+md"""
+1. What is the value of the magnetization vector at TE after one RF excitation ? 
+
+2. What happen if you put an off-resonance df = 50 Hz?
+
+3. Repeat the same measure but this time use : $M_{xy} = \sqrt{M_x^2 + M_y^2}$ and explain what you obtain.
+""" |> question
+
+# ╔═╡ 802905c7-58cc-47f3-a68d-4230a8ebf242
+md"""
+You don't need to simulate every time point, you can apply :
+	
+1. excitation
+2. freeprecess during dt = TE
+3. freeprecess during dt = TR - TE
+4. loop to 1.
+""" |> hint
+
+# ╔═╡ 41d4af71-17b4-462e-aeb2-fd416d646eac
+green_folded("Answer",			
+md"""
+1. For df = 0 Hz : $M =$ $(latexify_md(M_ge_tr1_0hz))
+			 
+2. For df = 10 Hz : $M =$ $(latexify_md(M_ge_tr1_50hz))
+The signal for Mx and My are different, this is due to the off resonance.
+		 
+3. When we use the magnitude of the signal, we now obtain the same value : 
+			 
+$M =$ $(latexify_md(Mxy_tr1_50hz)) but we loose the phase information that might be important for some applications (flow encoding, MR thermometry, elastrography).
+ """)
+
+# ╔═╡ d69493bf-77a2-4512-be9c-da1332ba75e4
+md"""
+1. Simulate the signal magnitude at TE for 10 TR. 
+2. Plot the results
+3. Do it with a larger and smaller flip angle
+
+**Give an interpretation about the results**
+""" |> question
+
+# ╔═╡ 8ff98244-b390-45f1-9b3c-875945da4550
+green_folded("Answer",
+md"""
+$(f2)
+
+The magnitude of the signal reach a constant value after a few TR. 
+			 
+ **The constant value of the magnetization vector is called the steady state.**
+
+ The number of TR required to reach this state is dependant of the flip angle but also of other physical variable of the isochromat (T1,T2...)
 """)
 
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
@@ -2288,10 +2639,10 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
+# ╟─1ec2231e-5457-4940-98bd-ae4b92ce5b0b
 # ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
 # ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
-# ╟─b11589a7-b7d3-46df-b0c2-b3cf84e6deda
 # ╟─c3d72b3f-1467-46fa-a964-387c625fcd2f
 # ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
 # ╟─c2f62d46-d6c7-45bf-a6fb-d8348f38e712
@@ -2300,15 +2651,44 @@ version = "1.13.0+0"
 # ╟─57809a43-2ff0-4758-b3f1-34a204b6fd07
 # ╟─432cc64f-3324-45ec-b86f-0c862a70febd
 # ╟─35cc0ff7-14f7-4144-a1f0-5483c05e8732
-# ╟─01a9ff7d-d6ab-48e7-aa42-e12921ced76b
-# ╠═640af8d0-9cb2-42e3-9bcd-64ec64b9e664
-# ╟─39efa123-c9b3-44fa-a8f2-90fa9aca2be5
-# ╠═ec1640b8-1a05-4892-a192-8d8a22850e9c
-# ╠═32c3762e-22d6-4b9e-b050-61a3202cd1f2
-# ╠═abb59cbd-e958-4d38-9ed6-dac4ae551cd6
+# ╠═01a9ff7d-d6ab-48e7-aa42-e12921ced76b
+# ╟─3a33ef9b-5948-4270-8c86-941a340a8029
+# ╟─3b5c3b6d-15a6-42c7-bae7-2e7a100cd1de
+# ╟─f3d04f2e-1c49-4abd-9fe2-6667dd5233b9
+# ╠═638256aa-ef09-4afe-92ee-4ac9939a0f5d
+# ╟─ec03551b-649c-4f33-9ccf-315f4f18968b
+# ╠═93df9818-a58b-4118-a612-7887d2aff92f
+# ╠═c3091f3d-cde9-4a25-a7c5-a3790f9eaf90
+# ╟─a564a238-d7b8-4e61-9827-920805e675bb
+# ╟─d59ad369-c95c-462d-90a3-2bf47780aed3
+# ╟─c3876124-7c0a-4442-a8fa-ee51f144cc9e
+# ╟─0f03a903-fcd4-4a42-829b-e612f79bf6f1
+# ╟─9e19225b-fcea-43c4-ae5e-701d87e67396
+# ╠═f8648cfe-01a9-4dff-a5ce-e980ef80a74e
+# ╟─fdd6c0dc-cba1-4b30-9f85-8e6f7057d971
+# ╠═dff72c32-7972-4c7b-95f0-834b1615bcb7
+# ╟─fc021473-d9cf-48d8-aa2a-fb84579c50b2
+# ╟─5265d9da-a2ae-4cda-be3b-ca7dc50de002
+# ╟─8a82299c-822c-4b7a-9a38-004969977dbc
+# ╟─34dffba7-b26b-4754-9687-e102cb414771
+# ╟─1f7826fc-dcb0-421f-b4e4-48833da4d36f
+# ╟─6cbba238-3bec-42a8-ac99-2c85647dc249
+# ╟─ebd0f73a-5eda-4d8c-be35-4daefc7be84e
+# ╟─fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
 # ╟─dcad004e-6399-43fe-a02f-4109af02de30
+# ╟─3671f3e4-0556-4453-83cb-e718fa294241
+# ╟─ab402fdd-e368-458f-afb0-ae0655c5dd50
+# ╟─802905c7-58cc-47f3-a68d-4230a8ebf242
+# ╟─f199d95f-5656-4646-a774-a38bba6ceb68
+# ╟─41d4af71-17b4-462e-aeb2-fd416d646eac
+# ╟─d69493bf-77a2-4512-be9c-da1332ba75e4
+# ╠═2a4fbac6-7da9-4719-84c0-75b2242b2ca4
+# ╟─8ff98244-b390-45f1-9b3c-875945da4550
+# ╟─a421da06-8174-4852-9a94-b1f96c0a9b88
+# ╟─d50f4ef4-a9e3-4cfa-949c-4533fc274652
+# ╟─4b860561-2dc1-4890-bbaf-1a7f02819d6e
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
-# ╟─54e96133-f840-41ee-bac5-db8dc7c196f3
+# ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
