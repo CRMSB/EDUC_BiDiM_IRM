@@ -1,42 +1,132 @@
 ### A Pluto.jl notebook ###
-# v1.0.1
-
-#> [frontmatter]
-#> title = "Bloch simulation"
-#> tags = ["educational"]
-#> description = "Implementation of bloch simulation"
-
+# v0.20.28
 
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 09e3c6f4-1028-4385-98d2-a53771c0424b
-using WGLMakie
+# ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
+begin
+	# Layout ..
+	using PlutoUI
+	using Random
+	using ShortCodes
+	using PlutoTeachingTools
+	using HypertextLiteral
+	using Latexify
 
-# ╔═╡ 0917997e-7492-11f1-848c-b953789e2f67
+	# Plot
+	using GLMakie
+
+	#Math
+	using LinearAlgebra
+
+	
+end
+
+# ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
+html"""
+	<h1 style="text-align:center">
+		Biomedical Master : MRI cursus
+	</h1> 
+	<div style="text-align:center">
+		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
+			Lesson 1: Equation de Bloch
+		</p>
+		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
+			Aurélien Trotier
+		</p>
+		<p style="font-size: 20px;">
+			CRMSB - Université de Bordeaux / CNRS
+		</p>
+	</div>
+"""
+
+# ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
 md"
-# TP IRM SIMULATION
-_Aurélien Trotier : Février 2023_
-
-Le signal IRM peut-être représenté grâce à l'équation de Bloch :
+NMR signal can be simulated with the bloch equations :
 
 $\frac{d\vec{M}}{dt} = \gamma \vec{M} \times \vec{B}_{ext} + \frac{1}{T_1} (M_0 - M_z)\vec{z} - \frac{1}{T_2} \vec{M}_\perp$
 
-Cette équation peut-être résolue dans certaines conditions : 
-- Rotation (voir wikipedia)
-- Relaxation
+The idea is to simulate a spin isochromat (a large sample of spin with the same properties and seeing the same events) by applying onto it the equation.
 
-Nous utiliserons ici une implémentation en matrice 4x4, ce qui donne pour la relaxation
+**This equation can be solved in simple cases :**
+1. Relaxation without precession
+2. RF excitations, gradients effects and off-resonance
+"
+
+
+# ╔═╡ 9fd5b724-4634-4fd9-b397-bc1e8161394d
+md"
+# Additionnal educational ressources
+"
+
+# ╔═╡ b11589a7-b7d3-46df-b0c2-b3cf84e6deda
+md"
+A really good presentation of bloch equation simulation is also available in **Lecture-03A from Stanford Rad229 course** by Dr. Daniel Ennis. (check also Lecture-01D).
+"
+
+# ╔═╡ c3d72b3f-1467-46fa-a964-387c625fcd2f
+YouTube("zhuc2J6nhvY")
+
+# ╔═╡ 9eede586-5ede-431e-be8c-8dc1a4869b5c
+md"
+## 1. Relaxation
+
+When relaxation occurs 
 
 $$\begin{equation}
-A = \begin{bmatrix}
-E2 & 0 & 0 & 0\\
-0 & E2 & 0 & 0\\
-0 & 0 & E1 & 1-E1\\
+\begin{split}
+\vec{M}(t+dt) &= \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}\vec{M}(t) +\begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix} \\
+&= A \ \vec{M}(t) +B
+\end{split}
+\end{equation}$$
+
+It is possible to use a 4x4 version that greatly simplify the calculus of succesive operators.
+
+$$\begin{equation}
+A_{4 \times 4} = \begin{bmatrix}
+E_2 & 0 & 0 & 0\\
+0 & E_2 & 0 & 0\\
+0 & 0 & E_1 & M_0(1-E_1)\\
 0 & 0 & 0 & 1
 \end{bmatrix}
 \end{equation}$$
 
+where $$E_1 = \exp{(-dt/T1)}$$ and $$E_2 = \exp{(-dt/T2)}$$
+"
+
+# ╔═╡ 35cc0ff7-14f7-4144-a1f0-5483c05e8732
+begin
+function recovery(dt,T1,T2)
+	E1 = exp(-dt/T1)
+	E2 = exp(-dt/T2)
+	A = diagm([E2, E2, E1,1])
+	A[3,4] = 1-E1
+return A
+end
+
+M_0 = [0;1;0;1]; # initial magnetization after tilt along Y axis
+A = recovery(100.0,1000,50)
+M_1 = A*M_0;
+A = recovery(600.0,1000,50)
+M_2 = A*M_0;
+A = recovery(5000.0,1000,50)
+M_3 = A*M_0
+
+end;
+
+# ╔═╡ 640af8d0-9cb2-42e3-9bcd-64ec64b9e664
+md"
+# 2. Excitation corresponding to rotations along X/Y axis
+Additionnaly an off-resonance effect can be added to this equation :
+
+$$A2 = zrot(\phi) \times A$$
+
+we will use the later notation in order to simulate off-resonance spins and $$T_2^*$$ decays.
+"
+
+# ╔═╡ 39efa123-c9b3-44fa-a8f2-90fa9aca2be5
+md"
 ## 1. Préparation des sous-fonctions
 
 Préparez les fonctions nécessaires à la simulation du signal IRM :
@@ -48,7 +138,7 @@ Préparez les fonctions nécessaires à la simulation du signal IRM :
 Validez que les fonctions fonctionnes bien (affichage d'une flèche avant et après rotation par exemple)
 "
 
-# ╔═╡ 40283716-bdfe-4692-b224-a12148a81f92
+# ╔═╡ ec1640b8-1a05-4892-a192-8d8a22850e9c
 begin
 	#--------------------------------------------------------
 	#  By convention all rotations are left-handed
@@ -111,10 +201,10 @@ begin
 end;
 
 
-# ╔═╡ 1ab70d5d-d46e-4ea3-93a6-ea91295ac70c
+# ╔═╡ 32c3762e-22d6-4b9e-b050-61a3202cd1f2
 md"### Prepare some plot functions"
 
-# ╔═╡ 4b3b03aa-0dd5-4292-a1c4-2ab410a7c649
+# ╔═╡ abb59cbd-e958-4d38-9ed6-dac4ae551cd6
 """ plot_magnetization(M::Matrix{<:Real};title="")
 
 M::Matrix{<:Real} : Magnetization vector of size 3(or 4)xN where N is the number of steps
@@ -134,16 +224,262 @@ function plot_magnetization(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
 	return f,ax
 end
 
-# ╔═╡ 85717027-c524-4b1e-b834-6d2866a3bc59
-lines(1:10)
+# ╔═╡ dcad004e-6399-43fe-a02f-4109af02de30
+md"
+## 2. Signal de précession libre
+
+Simuler 2 signaux de precession libre (correspondant à l'évolution du signal après une impulsion radiofréquence)  avec une valeur d'off-resonance de 0 ou 10 Hz :
+
+- angle = $$\frac{\pi}{2}$$ correspondant à une aimantation de départ selon l'axe 
+
+$$\vec{M} = \begin{bmatrix}
+  0\\ 
+  1\\
+  0 \\
+  0
+  \end{bmatrix}$$  
+
+- Pas de simulation : 1 ms
+- Durée de simulation : 1000 ms
+- Off-resonance : 0 ou 10 Hz
+- T1 = 600 ms
+- T2 = 100 ms
+
+**Expliquez la différence entre les 2 simulations ?**
+"
+
+
+# ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
+md"""
+# Helping functions
+"""
+
+# ╔═╡ 54e96133-f840-41ee-bac5-db8dc7c196f3
+begin
+    hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]));
+	answer_blurred(text) = Markdown.MD(Markdown.Admonition("tip", "Answer", [text]));
+	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]));
+    green_folded(title, text) = @htl("""
+    <details class="admonition info" style="background-color: #f1f8e9 !important; border-left-color: #2e7d32 !important; display: block; margin: 1em 0; padding: 0; border-left-style: solid; border-left-width: .4rem; border-radius: .2rem; box-shadow: 0 .2rem .5rem rgba(0,0,0,.05), 0 0 .05rem rgba(0,0,0,.1); overflow: hidden;">
+      <summary class="admonition-title" style="cursor: pointer; font-weight: bold; padding: .6rem 1rem .6rem 2rem; background-color: rgba(46, 125, 50, 0.1); color: #1b5e20; border-bottom: 1px solid rgba(46, 125, 50, 0.1); user-select: none;">
+        $title
+      </summary>
+      <div class="admonition-content" style="padding: 1rem;">
+        $text
+      </div>
+    </details>
+    """)
+end
+
+# ╔═╡ c2f62d46-d6c7-45bf-a6fb-d8348f38e712
+md"""
+Apply 2 consecutive relaxation operators with the 3x3 opertors and verify that you get the same results with the 4x4 operator. 
+	
+**Shows that you get the same results ?**
+""" |> question
+
+# ╔═╡ 43c65513-9db6-4ced-bea8-a41b2ce52c79
+md"""
+We want to apply a first operation to ${M}_{0} = \begin{bmatrix} M_x \\ M_y \\ M_z \\ 1 \end{bmatrix}$  :
+	
+$$M_1 = A_1 M_0 + B_1$$
+
+then a second relaxation steps :
+$$M_2 = A_2 M_1 + B_2 = A_2 A_1 M_0 + A_2 B1 + B_2$$
+
+Now if we use the 4x4 it gives :
+
+$$M_2 = A_2 A_1 M_0$$
+""" |> hint
+
+# ╔═╡ 67483df1-8124-48f0-8336-632186abc9fa
+green_folded("Correction",
+ md"""
+Pour prouver que la formulation $3 \times 3$ affine ($A\vec{M} + B$) et la formulation homogène $4 \times 4$ sont strictement équivalentes après deux étapes consécutives, il suffit de développer le produit matriciel de la méthode $4 \times 4$ et de le projeter sur l'espace $3 \times 3$.
+
+Voici la démonstration mathématique étape par étape, rédigée de manière à pouvoir être directement insérée dans ton notebook.
+
+---
+
+## Démonstration de l'équivalence
+
+Soit le vecteur de magnétisation augmenté à 4 dimensions :
+
+
+$$\vec{M}_{4} = \begin{bmatrix} M_x \\ M_y \\ M_z \\ 1 \end{bmatrix} = \begin{bmatrix} \vec{M} \\ 1 \end{bmatrix}$$
+
+L'opérateur de relaxation $4 \times 4$ est structuré à partir des composants $3 \times 3$ ($A$) et du vecteur colonne de relaxation ($B$) sous la forme d'une matrice par blocs :
+
+
+$$A_{4 \times 4} = \begin{bmatrix}
+A & B \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+
+Où $A = \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}$, $B = \begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix}$, et $\mathbf{0}^T = \begin{bmatrix} 0 & 0 & 0 \end{bmatrix}$.
+
+### 1. Application successive avec la méthode $4 \times 4$
+
+Pour deux étapes de relaxation successives ($1$ puis $2$), on multiplie les opérateurs matriciels :
+
+
+$$\vec{M}_2 = A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} \cdot \vec{M}_0$$
+
+Calculons le produit des deux matrices par blocs :
+
+
+$$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
+A_2 & B_2 \\
+\mathbf{0}^T & 1
+\end{bmatrix} \begin{bmatrix}
+A_1 & B_1 \\
+\mathbf{0}^T & 1
+\end{bmatrix} = \begin{bmatrix}
+A_2 A_1 + B_2 \mathbf{0}^T & A_2 B_1 + B_2 \cdot 1 \\
+\mathbf{0}^T A_1 + 1 \cdot \mathbf{0}^T & \mathbf{0}^T B_1 + 1 \cdot 1
+\end{bmatrix}$$
+
+Comme $B_2 \mathbf{0}^T$ est une matrice nulle $3 \times 3$, le produit se simplifie magnifiquement en :
+
+
+$$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
+A_2 A_1 & A_2 B_1 + B_2 \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+### 2. Application au vecteur initial
+
+En appliquant ce résultat au vecteur augmenté initial $\vec{M}_0$, on obtient :
+
+
+$$\vec{M}_2 = \begin{bmatrix}
+A_2 A_1 & A_2 B_1 + B_2 \\
+\mathbf{0}^T & 1
+\end{bmatrix} \begin{bmatrix} \vec{M}(0) \\ 1 \end{bmatrix} = \begin{bmatrix} (A_2 A_1)\vec{M}(0) + (A_2 B_1 + B_2)\cdot 1 \\ \mathbf{0}^T\vec{M}(0) + 1 \cdot 1 \end{bmatrix}$$
+
+$$\vec{M}_2 = \begin{bmatrix} A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2 \\ 1 \end{bmatrix}$$
+
+### Conclusion
+
+La composante 3D (les 3 premières lignes) du vecteur d'état final donne explicitement :
+
+
+$$\vec{M}(2) = A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2$$
+
+Ce résultat est **strictement identique** à l'expression obtenue avec la méthode standard $3 \times 3$ développée dans ton indice ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
+
+La formulation $4 \times 4$ permet donc d'encapsuler la translation (le terme $B$ lié à la récupération $T_1$) directement dans une seule multiplication matricielle, ce qui est beaucoup plus efficace pour enchaîner les événements (RF, gradients, relaxation) dans un simulateur Bloch.
+
+---
+
+Tu peux encapsuler cette réponse dans ta fonction `answer_folded_green` pour l'intégrer proprement à ton notebook Pluto !
+			 
+ """)
+
+# ╔═╡ 57809a43-2ff0-4758-b3f1-34a204b6fd07
+md"""
+Suppose we excite an isochromat of spin to put all the initial magnetization along the Y axis -> $$\vec{M} =  \begin{bmatrix} 0 \\ M_0 \\ 0 \\ 1 \end{bmatrix}$$
+
+Assuming the isochromate has the following properties :
+-  $T_1$ = 1000 ms  
+-  $T_2$ = 50 ms
+
+**What will be the value of the magnetization vector after a 100 ms, 600 ms And after 5 secondes of recovery ?**
+
+Give a short interpretation of the value for the case 600 ms and 5 secondes.
+""" |> question
+
+# ╔═╡ 432cc64f-3324-45ec-b86f-0c862a70febd
+md"""
+You can wrote the function to help you build the operator and perform the calculus :
+
+```julia
+function recovery(dt,T1,T2)
+		E1 = exp(-dt/T1)
+		E2 = exp(-dt/T2)
+		A = diagm([E2, E2, E1,1])
+		A[3,4] = 1-E1
+		A = zrot(phi,false)*A
+	return A
+end
+```
+""" |> hint
+
+# ╔═╡ 01a9ff7d-d6ab-48e7-aa42-e12921ced76b
+green_folded("Answer",
+md"""
+Using the following function :
+```julia
+function recovery(dt,T1,T2)
+	E1 = exp(-dt/T1)
+	E2 = exp(-dt/T2)
+	A = diagm([E2, E2, E1,1])
+	A[3,4] = 1-E1
+return A
+end
+
+M_0 = [0;1;0;1]; # initial magnetization after tilt along Y axis
+A = recovery(100.0,1000,50)
+M_1 = A * M_0;
+A = recovery(600.0,1000,50)
+M_2 = A * M_0;
+A = recovery(5000.0,1000,50)
+M_3 = A * M_0
+```
+			 
+For **dt = 100 ms** : $M =$ $(latexify_md(M_1))
+			 
+For **dt = 500 ms** : $M =$ $(latexify_md(M_2))
+
+For **dt = 5000 ms** :$M =$ $(latexify_md(M_3))
+
+## Interpretation
+For 600 ms and 5s,  almost all the magnetization along the Y axis is gone )  due to the $T_2$ decays (dt > 5 * $T_2$).
+
+For dt = 5 s, the magnetization is almost back at the state where all the magnetization is along the $B_0$ axis because dt > 5 * $T_1$)
+""")
+
+# ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
+html"""
+<style>
+    /* Force le titre à rester net en permanence */
+  .admonition.tip .admonition-title {
+      filter: none !important;
+  }
+  /* Cible le texte à l'intérieur pour le flouter */
+  .admonition.tip p {
+      filter: blur(3px);
+      transition: filter 0.4s ease; /* Effet de transition fluide */
+      cursor: pointer;
+  }
+
+  /* Annule le flou au survol de la souris (hover) */
+  .admonition.tip:hover p {
+      filter: none;
+  }
+</style>
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 
 [compat]
-WGLMakie = "~0.13.12"
+GLMakie = "~0.13.12"
+HypertextLiteral = "~1.0.0"
+Latexify = "~0.16.10"
+PlutoTeachingTools = "~0.4.7"
+PlutoUI = "~0.7.83"
+ShortCodes = "~0.4.2"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -152,7 +488,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "b9bc9a0145189eb81f8c36dccf97c035aa90b08c"
+project_hash = "aa4ceff5298bc389158f16b57c0a323b539b2cb7"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -164,6 +500,11 @@ weakdeps = ["ChainRulesCore", "Test"]
     [deps.AbstractFFTs.extensions]
     AbstractFFTsChainRulesCoreExt = "ChainRulesCore"
     AbstractFFTsTestExt = "Test"
+
+[[deps.AbstractPlutoDingetjes]]
+git-tree-sha1 = "6c3913f4e9bdf6ba3c08041a446fb1332716cbc2"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.4.0"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -256,17 +597,6 @@ version = "1.11.0"
 git-tree-sha1 = "8c290a1b223deaeea9aea44b235d24546da8eb98"
 uuid = "18cc8868-cbac-4acf-b575-c8ff214dc66f"
 version = "1.4.0"
-
-[[deps.BitFlags]]
-git-tree-sha1 = "bbe1079eecf9c9fbb52765193ad2bae27ae09bc8"
-uuid = "d1d4a3ce-64b1-5f1a-9ba4-7e7e69966f35"
-version = "0.1.10"
-
-[[deps.Bonito]]
-deps = ["Base64", "CodecZlib", "Colors", "Dates", "Deno_jll", "HTTP", "Hyperscript", "JSON", "LinearAlgebra", "Markdown", "MbedTLS", "MsgPack", "Observables", "OrderedCollections", "Random", "RelocatableFolders", "SHA", "Sockets", "Tables", "ThreadPools", "URIs", "UUIDs", "WidgetsBase"]
-git-tree-sha1 = "bb43f72801f703ad3c66833bd02b8f54c7328238"
-uuid = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
-version = "4.2.0"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -396,12 +726,6 @@ git-tree-sha1 = "7bc84b769c1d384315e7b5c4ac03a6c303e6cf35"
 uuid = "95dc2771-c249-4cd0-9c9f-1f3b4330693c"
 version = "0.1.8"
 
-[[deps.ConcurrentUtilities]]
-deps = ["Serialization", "Sockets"]
-git-tree-sha1 = "21d088c496ea22914fe80906eb5bce65755e5ec8"
-uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
-version = "2.5.1"
-
 [[deps.ConstructionBase]]
 git-tree-sha1 = "b4b092499347b18a015186eae3042f72267106cb"
 uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
@@ -451,17 +775,17 @@ deps = ["Printf"]
 uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 version = "1.11.0"
 
+[[deps.Dbus_jll]]
+deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "473e9afc9cf30814eb67ffa5f2db7df82c3ad9fd"
+uuid = "ee1fde0b-3d02-5ea6-8484-8dfef6360eab"
+version = "1.16.2+0"
+
 [[deps.DelaunayTriangulation]]
 deps = ["AdaptivePredicates", "EnumX", "ExactPredicates", "Random"]
 git-tree-sha1 = "c55f5a9fd67bdbc8e089b5a3111fe4292986a8e8"
 uuid = "927a84f5-c5f4-47a5-9785-b46e178433df"
 version = "1.6.6"
-
-[[deps.Deno_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "cd6756e833c377e0ce9cd63fb97689a255f12323"
-uuid = "04572ae6-984a-583e-9378-9577a1c2574d"
-version = "1.33.4+0"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -507,17 +831,17 @@ git-tree-sha1 = "c49898e8438c828577f04b92fc9368c388ac783c"
 uuid = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
 version = "1.0.7"
 
+[[deps.EpollShim_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "8a4be429317c42cfae6a7fc03c31bad1970c310d"
+uuid = "2702e6a9-849d-5ed8-8c21-79e8b8f9ee43"
+version = "0.0.20230411+1"
+
 [[deps.ExactPredicates]]
 deps = ["IntervalArithmetic", "Random", "StaticArrays"]
 git-tree-sha1 = "83231673ea4d3d6008ac74dc5079e77ab2209d8f"
 uuid = "429591f6-91af-11e9-00e2-59fbe8cec110"
 version = "2.2.9"
-
-[[deps.ExceptionUnwrapping]]
-deps = ["Test"]
-git-tree-sha1 = "d36f682e590a83d63d1c7dbd287573764682d12a"
-uuid = "460bff9d-24e4-43bc-9d9f-a8973cb893f4"
-version = "0.1.11"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -542,10 +866,12 @@ deps = ["Pkg", "Requires", "UUIDs"]
 git-tree-sha1 = "8e9c059d6857607253e837730dbf780b6b151acd"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.19.0"
-weakdeps = ["HTTP"]
 
     [deps.FileIO.extensions]
     HTTPExt = "HTTP"
+
+    [deps.FileIO.weakdeps]
+    HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 
 [[deps.FilePaths]]
 deps = ["FilePathsBase", "MacroTools", "Reexport"]
@@ -632,6 +958,24 @@ git-tree-sha1 = "7a214fdac5ed5f59a22c2d9a885a16da1c74bbc7"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
 version = "1.0.17+0"
 
+[[deps.GLFW]]
+deps = ["GLFW_jll"]
+git-tree-sha1 = "af06f66cca2b698ab9c482de55977ff8178d025e"
+uuid = "f7f18e0c-5ee9-5ccd-a5bf-e8befd85ed98"
+version = "3.4.6"
+
+[[deps.GLFW_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll", "libdecor_jll", "xkbcommon_jll"]
+git-tree-sha1 = "9e0fb9e54594c47f278d75063980e43066e26e20"
+uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
+version = "3.4.1+1"
+
+[[deps.GLMakie]]
+deps = ["ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeTypeAbstraction", "GLFW", "GeometryBasics", "LinearAlgebra", "Makie", "Markdown", "MeshIO", "ModernGL", "Observables", "PrecompileTools", "Printf", "ShaderAbstractions", "StaticArrays"]
+git-tree-sha1 = "4ab403982698430670bd5302bfe0bd303f9518b8"
+uuid = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+version = "0.13.12"
+
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "LinearAlgebra", "PrecompileTools", "Random", "StaticArrays"]
 git-tree-sha1 = "364685f5ffde25deb1bbcfd5bb278a5c6b7a9b37"
@@ -653,6 +997,12 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Li
 git-tree-sha1 = "45288942190db7c5f760f59c04495064eedf9340"
 uuid = "b0724c58-0f36-5564-988d-3bb0596ebc4a"
 version = "0.22.4+0"
+
+[[deps.Ghostscript_jll]]
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Zlib_jll"]
+git-tree-sha1 = "38044a04637976140074d0b0621c1edf0eb531fd"
+uuid = "61579ee1-b43e-5ca0-a5da-69d92c66a64b"
+version = "9.55.1+0"
 
 [[deps.Giflib_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -678,12 +1028,6 @@ git-tree-sha1 = "93d5c27c8de51687a2c70ec0716e6e76f298416f"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
 version = "0.11.2"
 
-[[deps.HTTP]]
-deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "PrecompileTools", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
-git-tree-sha1 = "51059d23c8bb67911a2e6fd5130229113735fc7e"
-uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "1.11.0"
-
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
 git-tree-sha1 = "f923f9a774fcf3f5cb761bfa43aeadd689714813"
@@ -701,6 +1045,18 @@ deps = ["Test"]
 git-tree-sha1 = "179267cfa5e712760cd43dcae385d7ea90cc25a4"
 uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
 version = "0.0.5"
+
+[[deps.HypertextLiteral]]
+deps = ["Tricks"]
+git-tree-sha1 = "d1a86724f81bcd184a38fd284ce183ec067d71a0"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "1.0.0"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "0ee181ec08df7d7c911901ea38baf16f755114dc"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "1.0.0"
 
 [[deps.ImageAxes]]
 deps = ["AxisArrays", "ImageBase", "ImageCore", "Reexport", "SimpleTraits"]
@@ -802,12 +1158,16 @@ version = "1.0.9"
 git-tree-sha1 = "79d6bd28c8d9bccc2229784f1bd637689b256377"
 uuid = "8197267c-284f-5f27-9208-e0e47529a953"
 version = "0.7.14"
-weakdeps = ["Random", "RecipesBase", "Statistics"]
 
     [deps.IntervalSets.extensions]
     IntervalSetsRandomExt = "Random"
     IntervalSetsRecipesBaseExt = "RecipesBase"
     IntervalSetsStatisticsExt = "Statistics"
+
+    [deps.IntervalSets.weakdeps]
+    Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+    RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+    Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[deps.InverseFunctions]]
 git-tree-sha1 = "a779299d77cd080bf77b97535acecd73e1c5e5cb"
@@ -904,6 +1264,24 @@ git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 version = "1.4.0"
 
+[[deps.Latexify]]
+deps = ["Format", "Ghostscript_jll", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "OrderedCollections", "Requires"]
+git-tree-sha1 = "44f93c47f9cd6c7e431f2f2091fcba8f01cd7e8f"
+uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+version = "0.16.10"
+
+    [deps.Latexify.extensions]
+    DataFramesExt = "DataFrames"
+    SparseArraysExt = "SparseArrays"
+    SymEngineExt = "SymEngine"
+    TectonicExt = "tectonic_jll"
+
+    [deps.Latexify.weakdeps]
+    DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    SymEngine = "123dc426-2d89-5057-bbad-38513e3affd8"
+    tectonic_jll = "d7dd28d6-a5e6-559c-9131-7eb760cdacc5"
+
 [[deps.LazyModules]]
 git-tree-sha1 = "a560dd966b386ac9ae60bdd3a3d3a326062d3c3e"
 uuid = "8cdb02fc-e678-4876-92c5-9defec4f444e"
@@ -999,11 +1377,10 @@ version = "1.0.1"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
 
-[[deps.LoggingExtras]]
-deps = ["Dates", "Logging"]
-git-tree-sha1 = "f00544d95982ea270145636c181ceda21c4e2575"
-uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
-version = "1.2.0"
+[[deps.MIMEs]]
+git-tree-sha1 = "c64d943587f7187e751162b3b84445bbbd79f691"
+uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
+version = "1.1.0"
 
 [[deps.MacroTools]]
 git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
@@ -1038,17 +1415,17 @@ git-tree-sha1 = "aa1078778be5a8e5259ff04fbc3d258b3e78d464"
 uuid = "0a4f8689-d25c-4efe-a92b-7142dfc1aa53"
 version = "0.6.9"
 
-[[deps.MbedTLS]]
-deps = ["Dates", "MbedTLS_jll", "MozillaCACerts_jll", "NetworkOptions", "Random", "Sockets"]
-git-tree-sha1 = "8785729fa736197687541f7053f6d8ab7fc44f92"
-uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
-version = "1.1.10"
+[[deps.Memoize]]
+deps = ["MacroTools"]
+git-tree-sha1 = "2b1dfcba103de714d31c033b5dacc2e4a12c7caa"
+uuid = "c03570c3-d221-55d1-a50c-7939bbd78826"
+version = "0.4.4"
 
-[[deps.MbedTLS_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "ff69a2b1330bcb730b9ac1ab7dd680176f5896b8"
-uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
-version = "2.28.1010+0"
+[[deps.MeshIO]]
+deps = ["ColorTypes", "FileIO", "GeometryBasics", "Printf"]
+git-tree-sha1 = "c009236e222df68e554c7ce5c720e4a33cc0c23f"
+uuid = "7269a6da-0436-5bbc-96c2-40638cbb6118"
+version = "0.5.3"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1060,6 +1437,12 @@ version = "1.2.0"
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 version = "1.11.0"
 
+[[deps.ModernGL]]
+deps = ["Libdl"]
+git-tree-sha1 = "ac6cb1d8807a05cf1acc9680e09d2294f9d33956"
+uuid = "66fc600b-dfda-50eb-8b99-91cfa97b1301"
+version = "1.1.8"
+
 [[deps.MosaicViews]]
 deps = ["MappedArrays", "OffsetArrays", "PaddedViews", "StackViews"]
 git-tree-sha1 = "7b86a5d4d70a9f5cdf2dacb3cbe6d251d1a61dbe"
@@ -1069,12 +1452,6 @@ version = "0.3.4"
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2025.11.4"
-
-[[deps.MsgPack]]
-deps = ["Serialization"]
-git-tree-sha1 = "f5db02ae992c260e4826fe78c942954b48e1d9c2"
-uuid = "99f44e22-a591-53d1-9472-aa23ef4bd671"
-version = "1.2.1"
 
 [[deps.MuladdMacro]]
 deps = ["PrecompileTools"]
@@ -1140,12 +1517,6 @@ deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
 version = "0.8.7+0"
 
-[[deps.OpenSSL]]
-deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]
-git-tree-sha1 = "1d1aaa7d449b58415f97d2839c318b70ffb525a0"
-uuid = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
-version = "1.6.1"
-
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
@@ -1201,6 +1572,12 @@ git-tree-sha1 = "0fac6313486baae819364c52b4f483450a9d793f"
 uuid = "5432bcbf-9aad-5242-b902-cca2824c8663"
 version = "0.5.12"
 
+[[deps.Pango_jll]]
+deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "58e5ed5e386e156bd93e86b305ebd21ac63d2d04"
+uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
+version = "1.57.1+0"
+
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
 git-tree-sha1 = "32a4e09c5f29402573d673901778a0e03b0807b9"
@@ -1233,6 +1610,18 @@ deps = ["ColorSchemes", "Colors", "Dates", "PrecompileTools", "Printf", "Random"
 git-tree-sha1 = "26ca162858917496748aad52bb5d3be4d26a228a"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.4.4"
+
+[[deps.PlutoTeachingTools]]
+deps = ["Downloads", "HypertextLiteral", "Latexify", "Markdown", "PlutoUI"]
+git-tree-sha1 = "90b41ced6bacd8c01bd05da8aed35c5458891749"
+uuid = "661c6b06-c737-4d37-b85c-46df65de6f69"
+version = "0.4.7"
+
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Downloads", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
+git-tree-sha1 = "e189d0623e7ce9c37389bac17e80aac3b0302e75"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.83"
 
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
@@ -1315,12 +1704,6 @@ weakdeps = ["FixedPointNumbers"]
 
     [deps.Ratios.extensions]
     RatiosFixedPointNumbersExt = "FixedPointNumbers"
-
-[[deps.RecipesBase]]
-deps = ["PrecompileTools"]
-git-tree-sha1 = "5c3d09cc4f31f5fc6af001c250bf1278733100ff"
-uuid = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-version = "1.3.4"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -1409,16 +1792,23 @@ deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 version = "1.11.0"
 
+[[deps.ShortCodes]]
+deps = ["Base64", "CodecZlib", "Downloads", "JSON", "LinearAlgebra", "Memoize", "URIs", "UUIDs"]
+git-tree-sha1 = "d79fb381c591540288499e7a63a24f37d2f150bc"
+uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+version = "0.4.2"
+
+    [deps.ShortCodes.extensions]
+    QRCodersExt = "QRCoders"
+
+    [deps.ShortCodes.weakdeps]
+    QRCoders = "f42e9828-16f3-11ed-2883-9126170b272d"
+
 [[deps.SignedDistanceFields]]
 deps = ["Statistics"]
 git-tree-sha1 = "3949ad92e1c9d2ff0cd4a1317d5ecbba682f4b92"
 uuid = "73760f76-fbc4-59ce-8f25-708e95d2df96"
 version = "0.4.1"
-
-[[deps.SimpleBufferStream]]
-git-tree-sha1 = "f305871d2f381d21527c770d4788c06c097c9bc1"
-uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
-version = "1.2.0"
 
 [[deps.SimpleTraits]]
 deps = ["InteractiveUtils", "MacroTools"]
@@ -1601,12 +1991,6 @@ deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
 
-[[deps.ThreadPools]]
-deps = ["Printf", "RecipesBase", "Statistics"]
-git-tree-sha1 = "50cb5f85d5646bc1422aa0238aa5bfca99ca9ae7"
-uuid = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
-version = "2.1.1"
-
 [[deps.TiffImages]]
 deps = ["CodecZstd", "ColorTypes", "DataStructures", "DocStringExtensions", "FileIO", "FixedPointNumbers", "IndirectArrays", "Inflate", "Mmap", "OffsetArrays", "PkgVersion", "PrecompileTools", "ProgressMeter", "SIMD", "UUIDs"]
 git-tree-sha1 = "9ca5f1f2d42f80df4b8c9f6ab5a64f438bbd9976"
@@ -1617,6 +2001,11 @@ version = "0.11.9"
 git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
+
+[[deps.Tricks]]
+git-tree-sha1 = "311349fd1c93a31f783f977a71e8b062a57d4101"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.13"
 
 [[deps.TriplotBase]]
 git-tree-sha1 = "4d4ed7f294cda19382ff7de4c137d24d16adc89b"
@@ -1666,23 +2055,17 @@ version = "1.28.0"
     NaNMath = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
     Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
-[[deps.WGLMakie]]
-deps = ["Bonito", "Colors", "FileIO", "FreeTypeAbstraction", "GeometryBasics", "Hyperscript", "LinearAlgebra", "Makie", "Observables", "PNGFiles", "PrecompileTools", "RelocatableFolders", "ShaderAbstractions", "StaticArrays"]
-git-tree-sha1 = "a21237d60281e607a47bf5835178ee5c13941dae"
-uuid = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
-version = "0.13.12"
+[[deps.Wayland_jll]]
+deps = ["Artifacts", "EpollShim_jll", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
+git-tree-sha1 = "96478df35bbc2f3e1e791bc7a3d0eeee559e60e9"
+uuid = "a2964d1f-97da-50d4-b82a-358c7fce9d89"
+version = "1.24.0+0"
 
 [[deps.WebP]]
 deps = ["CEnum", "ColorTypes", "FileIO", "FixedPointNumbers", "ImageCore", "libwebp_jll"]
 git-tree-sha1 = "aa1ca3c47f119fbdae8770c29820e5e6119b83f2"
 uuid = "e3aaa7dc-3e4b-44e0-be63-ffb868ccd7c1"
 version = "0.1.3"
-
-[[deps.WidgetsBase]]
-deps = ["Observables"]
-git-tree-sha1 = "30a1d631eb06e8c868c559599f915a62d55c2601"
-uuid = "eead4739-05f7-45a1-878c-cee36b57321c"
-version = "0.1.4"
 
 [[deps.WoodburyMatrices]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -1708,6 +2091,12 @@ git-tree-sha1 = "aa1261ebbac3ccc8d16558ae6799524c450ed16b"
 uuid = "0c0b7dd1-d40b-584c-a123-a41640f87eec"
 version = "1.0.13+0"
 
+[[deps.Xorg_libXcursor_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXfixes_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "6c74ca84bbabc18c4547014765d194ff0b4dc9da"
+uuid = "935fb764-8cf2-53bf-bb30-45bb1f8bf724"
+version = "1.2.4+0"
+
 [[deps.Xorg_libXdmcp_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "52858d64353db33a56e13c341d7bf44cd0d7b309"
@@ -1726,6 +2115,24 @@ git-tree-sha1 = "75e00946e43621e09d431d9b95818ee751e6b2ef"
 uuid = "d091e8ba-531a-589c-9de9-94069b037ed8"
 version = "6.0.2+0"
 
+[[deps.Xorg_libXi_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll", "Xorg_libXfixes_jll"]
+git-tree-sha1 = "a376af5c7ae60d29825164db40787f15c80c7c54"
+uuid = "a51aa0fd-4e3c-5386-b890-e753decda492"
+version = "1.8.3+0"
+
+[[deps.Xorg_libXinerama_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll"]
+git-tree-sha1 = "0ba01bc7396896a4ace8aab67db31403c71628f4"
+uuid = "d1454406-59df-5ea1-beac-c340f2130bc3"
+version = "1.1.7+0"
+
+[[deps.Xorg_libXrandr_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll", "Xorg_libXrender_jll"]
+git-tree-sha1 = "6c174ef70c96c76f4c3f4d3cfbe09d018bcd1b53"
+uuid = "ec84b674-ba8e-5d96-8ba1-2a689ba10484"
+version = "1.5.6+0"
+
 [[deps.Xorg_libXrender_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libX11_jll"]
 git-tree-sha1 = "7ed9347888fac59a618302ee38216dd0379c480d"
@@ -1743,6 +2150,24 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXau_jll", "Xorg_libXdmcp_j
 git-tree-sha1 = "bfcaf7ec088eaba362093393fe11aa141fa15422"
 uuid = "c7cfdc94-dc32-55de-ac96-5a1b8d977c5b"
 version = "1.17.1+0"
+
+[[deps.Xorg_libxkbfile_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libX11_jll"]
+git-tree-sha1 = "ed756a03e95fff88d8f738ebc2849431bdd4fd1a"
+uuid = "cc61e674-0454-545c-8b26-ed2c68acab7a"
+version = "1.2.0+0"
+
+[[deps.Xorg_xkbcomp_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libxkbfile_jll"]
+git-tree-sha1 = "801a858fc9fb90c11ffddee1801bb06a738bda9b"
+uuid = "35661453-b289-5fab-8a00-3d9160c6a3a4"
+version = "1.4.7+0"
+
+[[deps.Xorg_xkeyboard_config_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_xkbcomp_jll"]
+git-tree-sha1 = "ed349d26affcacafbc7fc2941ace1fb98f71e715"
+uuid = "33bec58e-1273-512f-9401-5d533626f822"
+version = "2.47.0+1"
 
 [[deps.Xorg_xtrans_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1783,6 +2208,12 @@ version = "0.17.4+0"
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 version = "5.15.0+0"
+
+[[deps.libdecor_jll]]
+deps = ["Artifacts", "Dbus_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pango_jll", "Wayland_jll", "xkbcommon_jll"]
+git-tree-sha1 = "9bf7903af251d2050b467f76bdbe57ce541f7f4f"
+uuid = "1183f4f0-6f2a-5f1a-908b-139f9cdfea6f"
+version = "0.2.2+0"
 
 [[deps.libdrm_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libpciaccess_jll"]
@@ -1847,14 +2278,37 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "e7b67590c14d487e734dcb925924c5dc43ec85f3"
 uuid = "dfaa095f-4041-5dcd-9319-2fabd8486b76"
 version = "4.1.0+0"
+
+[[deps.xkbcommon_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libxcb_jll", "Xorg_xkeyboard_config_jll"]
+git-tree-sha1 = "a1fc6507a40bf504527d0d4067d718f8e179b2b8"
+uuid = "d8fb68d0-12a3-5cfd-a85a-d49703b185fd"
+version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═09e3c6f4-1028-4385-98d2-a53771c0424b
-# ╟─0917997e-7492-11f1-848c-b953789e2f67
-# ╠═40283716-bdfe-4692-b224-a12148a81f92
-# ╟─1ab70d5d-d46e-4ea3-93a6-ea91295ac70c
-# ╠═4b3b03aa-0dd5-4292-a1c4-2ab410a7c649
-# ╠═85717027-c524-4b1e-b834-6d2866a3bc59
+# ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
+# ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
+# ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
+# ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
+# ╟─b11589a7-b7d3-46df-b0c2-b3cf84e6deda
+# ╟─c3d72b3f-1467-46fa-a964-387c625fcd2f
+# ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
+# ╟─c2f62d46-d6c7-45bf-a6fb-d8348f38e712
+# ╟─43c65513-9db6-4ced-bea8-a41b2ce52c79
+# ╟─67483df1-8124-48f0-8336-632186abc9fa
+# ╟─57809a43-2ff0-4758-b3f1-34a204b6fd07
+# ╟─432cc64f-3324-45ec-b86f-0c862a70febd
+# ╟─35cc0ff7-14f7-4144-a1f0-5483c05e8732
+# ╟─01a9ff7d-d6ab-48e7-aa42-e12921ced76b
+# ╠═640af8d0-9cb2-42e3-9bcd-64ec64b9e664
+# ╟─39efa123-c9b3-44fa-a8f2-90fa9aca2be5
+# ╠═ec1640b8-1a05-4892-a192-8d8a22850e9c
+# ╠═32c3762e-22d6-4b9e-b050-61a3202cd1f2
+# ╠═abb59cbd-e958-4d38-9ed6-dac4ae551cd6
+# ╟─dcad004e-6399-43fe-a02f-4109af02de30
+# ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
+# ╟─54e96133-f840-41ee-bac5-db8dc7c196f3
+# ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

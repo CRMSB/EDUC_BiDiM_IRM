@@ -34,17 +34,17 @@ PlutoTeachingTools.default_language[] = PlutoTeachingTools.PTTEnglish.EnglishUS(
 # ╔═╡ 04376141-9c94-4197-804a-932c35a53777
 html"""
 	<h1 style="text-align:center">
-		Julia for Machine Learning
-	</h1>
+		Biomedical Master : MRI cursus
+	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
 			Installation
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
-			Adrian Hill
+			Aurélien Trotier
 		</p>
 		<p style="font-size: 20px;">
-			TU Berlin, Winter Semester 25/26
+			CRMSB - Université de Bordeaux / CNRS
 		</p>
 	</div>
 """
@@ -69,13 +69,13 @@ winget install julia -s msstore
 #### Setting the default version
 For this class, we are going to use Julia 1.11. To set it as the default version on your machine, run
 ```bash
-juliaup default 1.11
+juliaup default 1.12
 ```
 """
 
 # ╔═╡ 3133b51c-c1c0-43d3-8938-1179e9466e44
 tip(
-    md"If these options don't work out for you, you can also [manually download Julia 1.11](https://julialang.org/downloads/).",
+    md"If these options don't work out for you, you can also [manually download Julia 1.12](https://julialang.org/downloads/).",
 )
 
 # ╔═╡ a619a607-aeb6-4ca1-b380-4cd41c8e6768
@@ -91,14 +91,14 @@ If your installation was successful, you should be greeted by the Julia Logo and
 """
 
 # ╔═╡ 1af86ae9-22a6-43f0-80b5-b8d6026abb39
-warning_box(md"Make sure you are using Julia 1.11!")
+warning_box(md"Make sure you are using Julia 1.12!")
 
 # ╔═╡ 7c9f3896-f9d8-477d-8a20-53114f6cc8ff
 md"""## Using the package manager
 Julia's package manager is called **Pkg**. In the Julia REPL, open the package manager by typing a closing square bracket **`]`**.
 
 
- The REPL prompt should change from `julia>` to `(@1.11) pkg>`:
+ The REPL prompt should change from `julia>` to `(@1.12) pkg>`:
 
 ![Pkg](https://i.imgur.com/rzH4rbv.png)
 
@@ -112,8 +112,8 @@ Markdown.MD(
         "Environments:",
         [
             md"""
-            The name in parenthesis (here `@v1.11`) is the name of the currently activated environment.
-            `(@v1.11)` is the global environment of our Julia 1.11 installation.
+            The name in parenthesis (here `@v1.12`) is the name of the currently activated environment.
+            `(@v1.12)` is the global environment of our Julia 1.12 installation.
 
             We will learn more about Pkg and environments in a later lecture!
             """,
@@ -125,9 +125,9 @@ Markdown.MD(
 md"""## Installing packages
 Packages can be added by typing `add PackageName` in the package manager.
 
-For the purpose of this class, we are going to install Pluto in our global `(@v1.11)` environment:
+For the purpose of this class, we are going to install Pluto in our global `(@v1.12)` environment:
 ```
-(@v1.11) pkg> add Pluto
+(@v1.12) pkg> add Pluto
 ```
 
 You should see Pkg install Pluto. Note that the package versions in your installation **don't** have to exactly match up with this screenshot:
