@@ -7,3 +7,4 @@ docs/src/public/pluto/pluto_export.json
 docs/src/public/pluto/index.html
 examples/index.html
 .gitignore
+examples/pluto_export.json
