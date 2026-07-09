@@ -31,6 +31,9 @@ begin
 
 	#Math
 	using LinearAlgebra
+	using Random
+	using Statistics
+	using Distributions
 
 	PlutoUI.TableOfContents()
 end
@@ -51,12 +54,6 @@ html"""
 			CRMSB - Université de Bordeaux / CNRS
 		</p>
 	</div>
-"""
-
-# ╔═╡ 1ec2231e-5457-4940-98bd-ae4b92ce5b0b
-md"""
-# TO DO :
-- traduire correction premère réponse
 """
 
 # ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
@@ -98,10 +95,14 @@ $$\begin{equation}
 \end{split}
 \end{equation}$$
 
-It is possible to use a 4x4 version that greatly simplify the calculus of succesive operators.
+It is possible to use a $4x4$ version, called homogeneous, that greatly simplify the calculus of succesive operators.
 
 $$\begin{equation}
 A_{4 \times 4} = \begin{bmatrix}
+A_{3x3} & B_{3x3}\\
+0 & 1
+\end{bmatrix}
+= \begin{bmatrix}
 E_2 & 0 & 0 & 0\\
 0 & E_2 & 0 & 0\\
 0 & 0 & E_1 & M_0(1-E_1)\\
@@ -356,6 +357,7 @@ To display how a sequence work we generally use a chronogram that represent how 
 
 ![gre](https://mrsd.readthedocs.io/en/latest/_images/flash1.png)
 
+### 2.1.1. Signal evolution of the gradient echo
 During this notebook we will not take into account the gradient. What is important is that we will read the signal at the TE and repeat the RF pulse for every repetition time (TR).
 """
 
@@ -397,8 +399,8 @@ begin
     
         Ate = freeprecess(TE,T1, T2, df)
         Atr = freeprecess(TR,T1, T2, df)
-    
-    
+
+  
         Rflip = yrot(alpha,true)
         # initiliaze aimantation along z
         M_tmp = [0,0,1,1]
@@ -439,7 +441,22 @@ end;
 md"""
 Let's do the same simulation / plot but this time we will apply a **spoiler** at the end of each TR.
 
-Applying a spoiler means that we want Mx=My=0
+Applying a spoiler means that we want Mx=My=0. 
+In a real sequence this is performed by adding :
+- a spoiling gradient at the end of the sequence
+- a RF-spoiling
+
+In our case we will simplify it with an **ideal spoiler !**
+
+In our 4x4 formalism, it looks like :
+$$Spoil = \begin{bmatrix}
+0\ 0\ 0\ 0 \\
+0\ 0\ 0\ 0 \\
+0\ 0\ 1\ 0 \\
+0\ 0\ 0\ 1 \\
+\end{bmatrix}$$
+
+You can apply it with $M = Spoil * M_0$
 """
 
 # ╔═╡ d50f4ef4-a9e3-4cfa-949c-4533fc274652
@@ -454,18 +471,330 @@ begin
         lines!(ax3, mag(Mte_alpha10_spoil),label = "alpha = 10°")
         lines!(ax3, mag(Mte_alpha30_spoil),label = "alpha = 30°")
         lines!(ax3, mag(Mte_alpha60_spoil),label = "alpha = 60°")
+        hlines!(ax3,mag(Mte_alpha60_spoil)[end],linestyle =:dot)
         Legend(f3[1,2],ax2)
+
         f3
 end
 
 # ╔═╡ 4b860561-2dc1-4890-bbaf-1a7f02819d6e
 md"""
-The curves are now a lot smoother and we changed the value are lowered.
+For RF and Spoiled gradient echo, curves are now a lot smoother and the intensity signal of the steady-state is lower than the one simulated with the non-spoiled version.
+
 Another intersting point is that the steady-state value is higher for alpha = 30° thant alpha = 10° in this case.
 
-The first simulation was a **FISP** sequence and the second is called a *Spoiled gradient echo**.
+--- 
+
+The first simulation was a **BSFFP : Balanced Steady State Free Precessin** sequence and the second is called a **RF and Spoiled gradient echo**.
+
 
 We will see more clearly what happens in a dedicated chapter on spoiling mecanism and gradient echo sequences.
+
+The number of TR necessary to reach that steady-state is called **dummy-scans** !
+
+**Note:** Generally the number of dummy-scans is small (< 20) but for some sequences, like the BSFFP / TrueFisp, this number increase and increase the total acquisition time of the sequence. Hopefully, preparation module has been developped to reduce this timing constraint, see: 
+
+[Deimling, M., and O. Heid. "Magnetization prepared true FISP imaging." Proceedings of the 2nd Annual Meeting of ISMRM, San Francisco. Vol. 495. 1994.](https://www.researchgate.net/profile/Oliver-Heid/publication/308954649_Magnetization_Prepared_True_FISP_Imaging/links/58a06509aca272046aad3719/Magnetization-Prepared-True-FISP-Imaging.pdf)
+"""
+
+# ╔═╡ 1f22c623-f4ae-476c-9456-c7479c902759
+md"""
+### 2.2.2. How to calculate steady state
+
+Analytical solution of the steady-state for the Spoiled Gradient-Echo can be calculated with the following equation : 
+
+$$M_{ss} = \frac{M_0(1 - E_1)}{1 - E_1 \cos(\alpha)}$$
+
+which gives, for $\alpha =$ $(alpha_2/pi*180) ° -  Mss = $(round((1-exp(-TR_2/T1_2))/(1-exp(-TR_2/T1_2)*cos(alpha_2)),digits=4))
+
+---
+**Calculus using 3x3 formalism**
+
+It is possible to calculate the steady state using the bloch equation. If we wrote the sequence as consecutive operator acting on magnetization with the 3x3 formalism : 
+
+$$M = Aeq * M_0 + Beq$$
+
+where Aeq and Beq are the equivalent operator, for example : $Aeq = Atr * R_{α}$  and Beq = Btr
+
+In the case of the steady-state, the magnetization is the same at the end of the acquisition and before the next one $M = M_0 = M_{ss}$ which gives
+
+For 3x3 implementation : $M_{ss} = (I - Aeq)^{-1} * Beq$
+
+which is solved using the Moore-Penrose pseudo-inverse function `pinv`
+
+---
+**Calculus using 4x4 formalism**
+
+For homogeneous formalism, the Aeq is the 3x3 part of the matrix and Beq is the 3x1 :
+
+$$\begin{equation}
+Aeq_{4 \times 4} = \begin{bmatrix}
+Aeq_{3x3} & Beq_{3x3}\\
+0 & 1
+\end{bmatrix}
+\end{equation}$$
+
+which gives :
+```julia
+Mss  = (I - Aeq[1:3,1:3])^{-1} * Aeq{4 \times 4}[1:3,4]
+```
+"""
+
+# ╔═╡ 7654ace2-29e8-4d2c-8f01-90506b621961
+begin
+	spoiler = [[0 0 0 0];[0 0 0 0];[0 0 1 0];[0 0 0 1]]
+
+	Aeq = spoiler * Atr * yrot(60,true)
+
+	Mss = pinv((I-Aeq)[1:3,1:3])*(Aeq)[1:3,4]
+end
+
+# ╔═╡ 9ac7a675-d0bb-4609-90df-d7fe20826481
+md"""
+## 2.2. Spin-Echo sequence
+
+### 2.2.1. What is a Spin-Echo
+A spin-echo sequence is the succession of the event : 
+1. RF pulse (generaly a 90°) f
+2. a delay of $\frac{TE}{2}$ 
+3. A second RF pulse (generaly a 180°)
+4. a delay of $\frac{TE}{2}$ 
+5. The signal is read at this position $TE$
+6. A delay which end at the TR (generally TR > 1s) 
+
+If we simulate the signal during the sequence we get this figure :
+"""
+
+# ╔═╡ a1eff48a-b734-4022-b72f-f9b220c36767
+function SpinEchoEvolution(;dT = 1,		# 1ms delta-time.
+	T = 1000,	# total duration
+	df = 5,	# Hz off-resonance.
+	T1 = 600,	# ms.
+	T2 = 100,	# ms.
+	TE = 50,	# ms.
+	TR = 500)	# ms.
+	
+	N1 = round(Int32,TE/2/dT)
+	N2 = round(Int32,(TR-TE/2)/dT)
+	
+	A = freeprecess(dT,T1,T2,df)
+	M = zeros(Float32,4, N1+N2+1)
+	M[:,1]=[0,0,1,1]
+	
+	Rflip = yrot(pi/2)
+	Rrefoc = xrot(pi)
+	
+	M[:,2]= A * Rflip * M[:,1]
+	
+	for k in range(3, N1+1)
+	    M[:,k] = A * M[:,k-1]
+	end
+		
+	M[:,N1+2]= A * Rrefoc * M[:,N1+1]   
+	
+	for k in range(2, N2)
+	    M[:,k + N1 + 1] = A * M[:,k + N1]
+	end
+	return M
+end
+
+# ╔═╡ 10f0b86b-b9be-417c-ac13-adb5d00e52de
+begin
+	f4,ax4 = plot_magnetization(SpinEchoEvolution();title="Aimantation of a spin echo")
+	vlines!(ax4,51,color=:black)
+	vlines!(ax4,26,color=:black,linestyle=:dot)
+	ax4.xticks=([0,26,50,collect(100:100:1000)...],["0",L"\frac{TE}{2}",L"TE",string.(100:100:1000)...])
+	xlims!(ax4,[-10,300])
+	f4
+end
+
+# ╔═╡ eada765f-eb05-4c75-bf8d-65c87f751e65
+md"""
+When we read $\frac{TE}{2}$ the magnetization along axis X and Z is reversed :
+
+$$\begin{equation} \begin{matrix}
+M_x^+(\frac{TE}{2}) = -M_x^-(\frac{TE}{2}) \\
+M_z^+(\frac{TE}{2}) = -M_z^-(\frac{TE}{2})
+\end{matrix}\end{equation}$$
+
+and the evolution of $M_y$ is inversed which bring the magnetization in phase at TE.
+"""
+
+
+# ╔═╡ a1f81c82-a99d-4281-8cf8-ed6ebc06627c
+md"""
+### 2.2.2. Off-resonance and Spin-Echo
+
+The Spin-Echo is really helpful to **compensate the off-resonance effect** that can occur in a voxel.
+
+To see the effect we will simulate 10 isochromats with various value of off-resonance (df)
+"""
+
+# ╔═╡ 981a3171-eb26-4198-a0c6-14bcab0612f4
+begin
+	function test(N_stochastic=10000)
+	# ---  Simulation Parameters ---
+		range_ = [-100,100]
+	T2star = 0.040   # 40 ms T2* 
+	γ_hz = (1/T2star) / (2pi)  # HWHM of Lorentzian distribution (~12.43 Hz)
+	t = range(0, 0.150, length=300) # Time vector up to 150 ms
+	
+	# --- 1. Setup Method A: random ---
+	
+	offsets_rand = 8*γ_hz*(rand(Float64,N_stochastic).-0.5)
+	
+	# Simulate dephasing: Mxy(t) = M0 * exp(i * 2π * f * t)
+	Mxy_rand_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_rand]
+	Mxy_rand_total = abs.(sum(Mxy_rand_spins, dims=2) ./ N_stochastic)
+
+		
+	# --- 2. Setup Method A: Stochastic (Random Cauchy) ---
+	
+	offsets_stoch = rand(Cauchy(0.0, γ_hz), N_stochastic)
+	# Clamp to avoid extreme outliers distorting the histogram view
+	offsets_stoch = clamp.(offsets_stoch, range_[1]*γ_hz, range_[2]*γ_hz) 
+	
+	# Simulate dephasing: Mxy(t) = M0 * exp(i * 2π * f * t)
+	Mxy_stoch_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_stoch]
+	Mxy_stoch_total = abs.(sum(Mxy_stoch_spins, dims=2) ./ N_stochastic)
+	
+	# --- 3. Setup Method B: Deterministic Isochromat Comb ---
+	offsets_det = range(-100*γ_hz, 100*γ_hz, length=N_stochastic)
+	weights = 1 ./ (2*pi .* γ_hz .* (1 .+ (offsets_det ./ γ_hz).^2))
+	weights ./= sum(weights) # Normalize
+	
+	Mxy_det_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_det]
+	Mxy_det_total = abs.(Mxy_det_spins * weights) # Weighted sum
+	
+	# Analytical T2* decay for reference
+	Mxy_analytical = exp.(-t ./ T2star)
+	
+	# --- 4. Plotting with Makie ---
+	fig = Figure(size = (900, 750), fontsize = 14)
+	
+	# Top Left: Histogram of Stochastic Spins
+	ax1 = Axis(fig[1, 1], 
+	    title = "Stochastic Sampling (N=$N_stochastic)", 
+	    xlabel = "Frequency Offset (Hz)", ylabel = "Density")
+	hist!(ax1, offsets_stoch, bins = ceil(Int,N_stochastic/2), normalization = :pdf, color = (:red, 0.5), label = "Sampled")
+	lines!(ax1, range(-5*γ_hz, 5*γ_hz, length=200), f -> 1/(pi*γ_hz*(1+(f/γ_hz)^2)), color = :black, linestyle = :dash, linewidth = 2)
+	xlims!(ax1,[-20,20])
+	
+	# Top center: Stem of Deterministic Isochromats
+	ax2 = Axis(fig[1, 2], 
+	    title = "Deterministic Isochromat Comb (N=$N_stochastic)", 
+	    xlabel = "Frequency Offset (Hz)", ylabel = "Weight")
+	stem!(ax2, offsets_det, weights, color = :blue, markersize = 6)
+	xlims!(ax2,[-20,20])
+
+	# Top Right: Stem of random Isochromats
+	ax4 = Axis(fig[1, 3], 
+	    title = "random (N=$N_stochastic)", 
+	    xlabel = "Frequency Offset (Hz)", ylabel = "Weight")
+	hist!(ax4, offsets_rand, bins = 100, normalization = :pdf,color = (:green,0.5))
+	xlims!(ax4,[-20,20])
+		
+	# Bottom: Decay Comparison
+	ax3 = Axis(fig[2, 1:3], 
+	    title = "Intra-Voxel Dephasing (T2*) Signal Decay", 
+	    xlabel = "Time (s)", ylabel = "|Mxy| Magnitude",
+	    limits = (nothing, nothing, 0, 1))
+	
+	lines!(ax3, t, Mxy_analytical, color = :black, linewidth = 3, label = "Analytical Exp(-t/T2*)")
+	lines!(ax3, t, vec(Mxy_rand_total), color = :green, linewidth = 2, linestyle = :dash, label = "random")
+	lines!(ax3, t, vec(Mxy_stoch_total), color = :red, linewidth = 2, linestyle = :dot, label = "Stochastic Simulation")
+	lines!(ax3, t, vec(Mxy_det_total), color = :blue, linewidth = 2, linestyle = :dash, label = "Deterministic Grid")
+	
+	axislegend(ax3, position = :rt)
+	
+	return fig
+	
+	end
+	fig = test(1000)
+end
+
+# ╔═╡ 9294ee6b-04f0-4bdf-a150-dfadff80222e
+begin 
+	function simuEchoSpinMultiDf(;nDf::Int64 = 1000,)
+	range_ = [-200,200]
+
+	M = SpinEchoEvolution(df=0)
+	M = zeros(eltype(M),size(M)...,nDf)
+
+	Δhz = 50
+	offsets_stoch = rand(Cauchy(0.0, Δhz), nDf)
+	# Clamp to avoid extreme outliers distorting the histogram view
+	offsets_stoch = clamp.(offsets_stoch, range_[1]*Δhz, range_[2]*Δhz) 
+	
+	#offsets_stoch = Δhz*rand(nDf)
+		
+	for (i,df) in enumerate(offsets_stoch)
+		M[:,:,i] = SpinEchoEvolution(df=df)
+	end
+	Mave = mean(M,dims=3)[:,:,1]
+	
+	##########################	
+	###### plot (note : TE position = 50+1 )
+	##########################
+	f=Figure()
+	ax = Axis(f[1,1],title="Magnetization evolution")
+	ax.xlabel="Time [ms]"
+	ax.ylabel="Mangnetization [ms]"
+	lines!(ax,sqrt.(M[1,:,1].^2+M[2,:,1].^2),label = "Mxy")
+	
+	lines!(ax,sqrt.(Mave[1,:].^2+Mave[2,:].^2),label = "Mxy of sum")
+	axislegend()
+
+	vlines!(ax,50+1,color=:black)
+	ax.xticks=([1,50+1,collect(100:100:1000)...],["0","TE",string.(100:100:1000)...])
+	
+	# plot phase
+	ax2 = Axis(f[2,1],title="Phase evolution of all the isochromate")
+	ax2.xlabel="Time [ms]"
+	ax2.ylabel="Phase [rad]"
+	
+	for i in 1:10
+		lines!(ax2,angle.(M[1,:,i]+im*M[2,:,i]))
+	end
+	vlines!(ax2,50+1,color=:black)
+	ax2.xticks=([0,50+1,collect(100:100:1000)...],["0","TE",string.(100:100:1000)...])
+
+		xlims!(ax,[0,100])
+		xlims!(ax2,[0,100])
+	f
+end
+simuEchoSpinMultiDf(nDf = 100)
+end
+
+# ╔═╡ 34f5d1f9-3add-44d8-ad05-4acb08921d82
+md"""
+# Conclusion
+
+Bloch simulation is a useful tool for MR signal and can be easily extended to incorporate more advanced physics effect like : 
+- Magnetization Transfert (MT)
+- Diffusion
+
+You can find various ressources online that implement Bloch-Simulation (non exhaustive list):
+
+- BlochSim.jl - **julia**
+- MRIgeneralizedBloch.jl - **julia**
+- [BlochSimulators.jl](https://github.com/MagneticResonanceImaging/BlochSimulators.jl) - **julia**
+- [BlochSim](https://github.com/ZhengguoTan/BlochSim) - **python**
+- Check [rad229](https://github.com/mribri999/MRSignalsSeqs) using initial implementation of hargreaves - **matlab / python**
+- [mcmrsimulator](https://open.oxcin.ox.ac.uk/pages/ndcn0236/mcmrsimulator.jl/stable/) monte carlo simulator for diffusion with membrane permeability, geometry **Julia**
+- [bloch_sim](https://github.com/tomokell/bloch_sim) - **Matlab**
+- [BM_fim_fit](https://github.com/cest-sources/BM_sim_fit/) - **Matlab**
+
+For sequence simulation, **KomaMRI.jl** is one of the main package (with **MRZero**) and they optimized bloch simulation to simulate the results of a sequence.
+
+# Next
+
+Bloch simulation can be computationaly intensive because you need to create a lot of isochromate in order to average random effects. This is especially true when you want to simulate the effect of a gradient spoiler (More information about that later). 
+
+But different approaches has been developped over the years to find a way to average the effect in simulation like
+: **Phase Distribution Graph** used in MRZero and **Extended Phase Graph** (EPG)
+
+In the next chapter, you will learn to manipulate EPG !
 """
 
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
@@ -515,39 +844,35 @@ $$M_2 = A_2 A_1 M_0$$
 # ╔═╡ 67483df1-8124-48f0-8336-632186abc9fa
 green_folded("Answer",
  md"""
-Pour prouver que la formulation $3 \times 3$ affine ($A\vec{M} + B$) et la formulation homogène $4 \times 4$ sont strictement équivalentes après deux étapes consécutives, il suffit de développer le produit matriciel de la méthode $4 \times 4$ et de le projeter sur l'espace $3 \times 3$.
 
-Voici la démonstration mathématique étape par étape, rédigée de manière à pouvoir être directement insérée dans ton notebook.
+To prove that the $3 \times 3$ affine formulation ($A\vec{M} + B$) and the $4 \times 4$ homogeneous formulation are strictly equivalent after two consecutive steps, it is sufficient to expand the matrix product of the $4 \times 4$ method and project it onto the $3 \times 3$ space.
+
+Here is the step-by-step mathematical proof, written so it can be directly inserted into your notebook.
 
 ---
 
-**Démonstration de l'équivalence**
+**Proof of Equivalence**
 
-Soit le vecteur de magnétisation augmenté à 4 dimensions :
-
+Let the augmented 4-dimensional magnetization vector be:
 
 $$\vec{M}_{4} = \begin{bmatrix} M_x \\ M_y \\ M_z \\ 1 \end{bmatrix} = \begin{bmatrix} \vec{M} \\ 1 \end{bmatrix}$$
 
-L'opérateur de relaxation $4 \times 4$ est structuré à partir des composants $3 \times 3$ ($A$) et du vecteur colonne de relaxation ($B$) sous la forme d'une matrice par blocs :
-
+The $4 \times 4$ relaxation operator is structured from the $3 \times 3$ components ($A$) and the relaxation column vector ($B$) as a block matrix:
 
 $$A_{4 \times 4} = \begin{bmatrix}
 A & B \\
 \mathbf{0}^T & 1
 \end{bmatrix}$$
 
+Where $A = \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}$, $B = \begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix}$, and $\mathbf{0}^T = \begin{bmatrix} 0 & 0 & 0 \end{bmatrix}$.
 
-Où $A = \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}$, $B = \begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix}$, et $\mathbf{0}^T = \begin{bmatrix} 0 & 0 & 0 \end{bmatrix}$.
+**1. Successive application with the $4 \times 4$ method**
 
-**1. Application successive avec la méthode $4 \times 4$**
-
-Pour deux étapes de relaxation successives ($1$ puis $2$), on multiplie les opérateurs matriciels :
-
+For two successive relaxation steps ($1$ then $2$), we multiply the matrix operators:
 
 $$\vec{M}_2 = A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} \cdot \vec{M}_0$$
 
-Calculons le produit des deux matrices par blocs :
-
+Let's compute the product of the two block matrices:
 
 $$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
 A_2 & B_2 \\
@@ -560,18 +885,16 @@ A_2 A_1 + B_2 \mathbf{0}^T & A_2 B_1 + B_2 \cdot 1 \\
 \mathbf{0}^T A_1 + 1 \cdot \mathbf{0}^T & \mathbf{0}^T B_1 + 1 \cdot 1
 \end{bmatrix}$$
 
-Comme $B_2 \mathbf{0}^T$ est une matrice nulle $3 \times 3$, le produit se simplifie magnifiquement en :
-
+Since $B_2 \mathbf{0}^T$ is a $3 \times 3$ zero matrix, the product simplifies beautifully to:
 
 $$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
 A_2 A_1 & A_2 B_1 + B_2 \\
 \mathbf{0}^T & 1
 \end{bmatrix}$$
 
-**2. Application au vecteur initial**
+**2. Application to the initial vector**
 
-En appliquant ce résultat au vecteur augmenté initial $\vec{M}_0$, on obtient :
-
+Applying this result to the initial augmented vector $\vec{M}_0$, we get:
 
 $$\vec{M}_2 = \begin{bmatrix}
 A_2 A_1 & A_2 B_1 + B_2 \\
@@ -582,15 +905,13 @@ $$\vec{M}_2 = \begin{bmatrix} A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2 \\ 1 \end{bmatr
 
 **Conclusion**
 
-La composante 3D (les 3 premières lignes) du vecteur d'état final donne explicitement :
-
+The 3D component (the first 3 rows) of the final state vector explicitly yields:
 
 $$\vec{M}(2) = A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2$$
 
-Ce résultat est **strictement identique** à l'expression obtenue avec la méthode standard $3 \times 3$ développée dans ton indice ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
+This result is **strictly identical** to the expression obtained with the standard $3 \times 3$ method expanded in your hint ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
 
-La formulation $4 \times 4$ permet donc d'encapsuler la translation (le terme $B$ lié à la récupération $T_1$) directement dans une seule multiplication matricielle, ce qui est beaucoup plus efficace pour enchaîner les événements (RF, gradients, relaxation) dans un simulateur Bloch.
-			 
+Therefore, the $4 \times 4$ formulation allows embedding the translation (the $B$ term related to $T_1$ recovery) directly into a single matrix multiplication, which is much more efficient for chaining events (RF, gradients, relaxation) within a Bloch simulator. 
  """)
 
 # ╔═╡ 57809a43-2ff0-4758-b3f1-34a204b6fd07
@@ -791,6 +1112,84 @@ The magnitude of the signal reach a constant value after a few TR.
  The number of TR required to reach this state is dependant of the flip angle but also of other physical variable of the isochromat (T1,T2...)
 """)
 
+# ╔═╡ 6f418850-5510-4c80-b7e2-07c6f7e6bfb4
+md"""
+1. What is the Aeq operator for the spoiled gradient echo sequence ?
+
+2. Give the steady state value for the previous case and $\alpha = 60°$ and compare it to the analytical equation
+""" |> question
+
+# ╔═╡ abdb1a50-17d0-4cfb-87d4-227ea6577e14
+md"""
+Don't forget to add the spoiler
+
+The steady-state calculated by the analytical equation is MZss
+""" |> hint
+
+# ╔═╡ b302bd6d-4c84-407e-8f09-ccb117514877
+green_folded("Answer",
+md"""
+$$Aeq = Spoil \  A_{tr} \ R_\alpha$$
+
+And Mss = $(latexify_md(Mss))
+
+The Z component is equal to the analytical solution
+""")
+
+# ╔═╡ 6ac9e5f5-5a83-4348-82b9-1577aff52c90
+md"""
+If we want to obtain the steady state at TE (and not at TR) we need to write the equation starting at TE
+
+$$M = A_{te}\ R_α \ \text{spoil} \ A_{tr-te} \ M_{TE}$$
+and solve this by writting $M = M_{TE} = M_{ss}$ at TE
+""" |> note
+
+# ╔═╡ 71f951f2-1d6c-4387-8aee-f619a886c79b
+md"""
+The isochromat off-resonance choice should follow a **lorentzienne distrubion** and not a normal distribution.
+
+This can be easily undestand because in the voxel we expects to see a decreasing exponential of signal due to the $T_2^*$
+""" |> note
+
+# ╔═╡ a29e232f-624d-48f1-a96f-d2c396b0dd32
+md"""
+1. Can you tell what equation follow the green curves ?
+2. Can you explain where it comes from ?
+""" |> question
+
+# ╔═╡ 5a0fc2b1-09ce-41b7-bfb9-cdae625067a3
+green_folded("Answer",
+md"""
+ 1. The green curves follow the magnitude of a sinc function. 
+ 2. This clear phenomenon can be The fourier transform of a 
+""")
+
+# ╔═╡ 484d1abc-0b1c-46a4-95aa-0fed3e124db9
+md"""
+1. Explain what  happens at TE ?
+
+2. What is the value of the maximum signal at TE ?
+""" |> question
+
+# ╔═╡ ce4ef0fe-7821-493c-8064-d82eb1fc34ff
+green_folded("Answer",
+md"""
+
+**1.**
+			 
+Between the 90°/180° (before TE/2) pulses the different isochromat dephase according to their different off-resonance value.
+
+The 180° RF pulse rotate them around the Y axis which means that the phase they accumulate $Φ$ is then reversed to $-Φ$.
+
+During the 180 and TE the dephasing still occurs and bring all the spin in phase. **It is a Spin Echo**
+
+**2.**	
+
+The signal decrease we observed at TE is only due to the $T_2$ effect :
+			 
+			 $$S(TE) = M_0 \exp{-\frac{TE}{T2}}$$
+""")
+
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
 html"""
 <style>
@@ -815,6 +1214,7 @@ html"""
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
@@ -823,8 +1223,10 @@ PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
+Distributions = "~0.25.129"
 GLMakie = "~0.13.12"
 HypertextLiteral = "~1.0.0"
 Latexify = "~0.16.10"
@@ -839,7 +1241,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "aa4ceff5298bc389158f16b57c0a323b539b2cb7"
+project_hash = "dafa1c5dbb36807224c4efad756cfc706ba0f06e"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2639,7 +3041,6 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
-# ╟─1ec2231e-5457-4940-98bd-ae4b92ce5b0b
 # ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
 # ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
@@ -2651,7 +3052,7 @@ version = "1.13.0+0"
 # ╟─57809a43-2ff0-4758-b3f1-34a204b6fd07
 # ╟─432cc64f-3324-45ec-b86f-0c862a70febd
 # ╟─35cc0ff7-14f7-4144-a1f0-5483c05e8732
-# ╠═01a9ff7d-d6ab-48e7-aa42-e12921ced76b
+# ╟─01a9ff7d-d6ab-48e7-aa42-e12921ced76b
 # ╟─3a33ef9b-5948-4270-8c86-941a340a8029
 # ╟─3b5c3b6d-15a6-42c7-bae7-2e7a100cd1de
 # ╟─f3d04f2e-1c49-4abd-9fe2-6667dd5233b9
@@ -2664,7 +3065,7 @@ version = "1.13.0+0"
 # ╟─c3876124-7c0a-4442-a8fa-ee51f144cc9e
 # ╟─0f03a903-fcd4-4a42-829b-e612f79bf6f1
 # ╟─9e19225b-fcea-43c4-ae5e-701d87e67396
-# ╠═f8648cfe-01a9-4dff-a5ce-e980ef80a74e
+# ╟─f8648cfe-01a9-4dff-a5ce-e980ef80a74e
 # ╟─fdd6c0dc-cba1-4b30-9f85-8e6f7057d971
 # ╠═dff72c32-7972-4c7b-95f0-834b1615bcb7
 # ╟─fc021473-d9cf-48d8-aa2a-fb84579c50b2
@@ -2672,7 +3073,7 @@ version = "1.13.0+0"
 # ╟─8a82299c-822c-4b7a-9a38-004969977dbc
 # ╟─34dffba7-b26b-4754-9687-e102cb414771
 # ╟─1f7826fc-dcb0-421f-b4e4-48833da4d36f
-# ╟─6cbba238-3bec-42a8-ac99-2c85647dc249
+# ╠═6cbba238-3bec-42a8-ac99-2c85647dc249
 # ╟─ebd0f73a-5eda-4d8c-be35-4daefc7be84e
 # ╟─fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
 # ╟─dcad004e-6399-43fe-a02f-4109af02de30
@@ -2682,11 +3083,30 @@ version = "1.13.0+0"
 # ╟─f199d95f-5656-4646-a774-a38bba6ceb68
 # ╟─41d4af71-17b4-462e-aeb2-fd416d646eac
 # ╟─d69493bf-77a2-4512-be9c-da1332ba75e4
-# ╠═2a4fbac6-7da9-4719-84c0-75b2242b2ca4
+# ╟─2a4fbac6-7da9-4719-84c0-75b2242b2ca4
 # ╟─8ff98244-b390-45f1-9b3c-875945da4550
 # ╟─a421da06-8174-4852-9a94-b1f96c0a9b88
-# ╟─d50f4ef4-a9e3-4cfa-949c-4533fc274652
+# ╠═d50f4ef4-a9e3-4cfa-949c-4533fc274652
 # ╟─4b860561-2dc1-4890-bbaf-1a7f02819d6e
+# ╟─1f22c623-f4ae-476c-9456-c7479c902759
+# ╟─6f418850-5510-4c80-b7e2-07c6f7e6bfb4
+# ╟─abdb1a50-17d0-4cfb-87d4-227ea6577e14
+# ╟─7654ace2-29e8-4d2c-8f01-90506b621961
+# ╟─b302bd6d-4c84-407e-8f09-ccb117514877
+# ╟─6ac9e5f5-5a83-4348-82b9-1577aff52c90
+# ╟─9ac7a675-d0bb-4609-90df-d7fe20826481
+# ╠═a1eff48a-b734-4022-b72f-f9b220c36767
+# ╟─10f0b86b-b9be-417c-ac13-adb5d00e52de
+# ╟─eada765f-eb05-4c75-bf8d-65c87f751e65
+# ╟─a1f81c82-a99d-4281-8cf8-ed6ebc06627c
+# ╟─71f951f2-1d6c-4387-8aee-f619a886c79b
+# ╟─981a3171-eb26-4198-a0c6-14bcab0612f4
+# ╟─a29e232f-624d-48f1-a96f-d2c396b0dd32
+# ╟─5a0fc2b1-09ce-41b7-bfb9-cdae625067a3
+# ╟─9294ee6b-04f0-4bdf-a150-dfadff80222e
+# ╟─484d1abc-0b1c-46a4-95aa-0fed3e124db9
+# ╟─ce4ef0fe-7821-493c-8064-d82eb1fc34ff
+# ╟─34f5d1f9-3add-44d8-ad05-4acb08921d82
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
 # ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
