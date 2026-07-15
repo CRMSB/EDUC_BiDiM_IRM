@@ -7,6 +7,9 @@
 
 
 ## How to update the website with this repository
+### Write a course
+
+An example is available in `src/template.jl`
 
 ### Pluto notebooks
 Pluto notebooks are stored in the `examples` folder.
@@ -36,4 +39,5 @@ and the content of the example folder should be copied to `docs/src/public`.
 using LiveServer
 servedocs(; buildfoldername="build/1")
 ```
+
 
