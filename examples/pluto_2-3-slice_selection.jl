@@ -13,6 +13,7 @@ begin
 	using PlutoTeachingTools
 	using HypertextLiteral
 	using Latexify
+	using Suppressor
 
 	# Plot
 	using GLMakie
@@ -173,9 +174,9 @@ $$\alpha = \gamma \int_{0}^{T} B_1(t) \, dt$$
 
 Sometimes we use a version with the normalized shape envelope integral ($K_{shape}$) of the pulse and the $B_{1,\text{max}}$ in order to calculate the flip angle :
 
-$$\alpha = \gamma \cdot B_{1,\text{max}} \cdot \Delta T \cdot K_{\text{shape}}$$
+$$\alpha = \gamma \cdot B_{1,\text{max}} \cdot T \cdot K_{\text{shape}}$$
 
-where $K_{\text{shape}} = \int_{0}^{T} b_1(t) \, dt$ and $b_1(t) = \frac{B_1(t)}{B_{1,\text{max}}}$.
+where $K_{\text{shape}} = \int_{0}^{T} |b_1(t)| \, dt$ and $b_1(t) = \frac{B_1(t)}{B_{1,\text{max}}}$.
 
 ### Bandwidth ($\Delta f$)
 The range of frequencies excited by the pulse. In the presence of a magnetic field gradient ($G_z$), this frequency bandwidth maps directly to a physical spatial location and determines the slice thickness ($\Delta z$):
@@ -537,7 +538,8 @@ begin
 		γ = 267.513e6 #rad/T
 		Trf = 196e-6 #s
 		rf = create_rect(Trf,pi/2,dt=1e-6)
-		B1peak = sum(rf) /( γ * Trf)
+		effective_alpha = sum(rf)
+		B1peak = effective_alpha /( γ * Trf)
 		
 		return B1peak
 	end
@@ -648,131 +650,160 @@ md"""
 
 To simplify our simulation work we will use a package called **KomaMRI.jl**. It is an efficient sequence simulator using bloch equation and isochromates.
 
-In this course, we are going to use it to simulate the effect of rf pulse. To demonstrate how to use it we will create a sinc function
+In this course, we are going to use it to simulate the effect of rf pulse. To demonstrate how to use it we will create a sinc function. 
+
+Note : **KomaMRI** expects the RF to be scaled in **Tesla**.
 """
+
+# ╔═╡ 7cba0ec0-949f-4626-941e-ded9da60b623
+md"""
+For this part we will work with the SINC function which is a really common RF envelop.
+
+**Definition**
+
+A Sinc RF pulse envelope is defined by the mathematical 
+sinc function:
+
+$$B_1(t) = B_{1,\text{max}} \cdot \text{sinc}\left(\frac{\pi t}{\tau}\right) = B_{1,\text{max}} \cdot \frac{\sin(\pi t / \tau)}{\pi t / \tau}$$
+
+where $B_{1,\text{max}}$ is the peak amplitude, $t$ is time centered at $t = 0$, and $\tau$ dictates the time interval between zero-crossings.
+
+**Bandwidth ($\Delta f$)**
+
+The excitation bandwidth $\Delta f$ (typically measured as Full Width at Half Maximum, FWHM) is inversely proportional to the pulse duration $T$:
+
+$$\Delta f = \frac{\text{TBW}}{T}$$
+"""
+
+# ╔═╡ f498d8d7-0793-4df5-91f1-3709c4b9b1ce
+md"""
+You might see a discrepency in your code between the text book (like the "Handbook of MRI Pulse sequence") and the code.
+Most of the sinc function integrates the term **$\pi$** directly in the function :
+	
+$$\text{sinc}(t) = \frac{sin(\pi t)}{\pi t}$$
+
+**This is the case for the julia code**
+""" |> warning_box
 
 # ╔═╡ b116f4bc-f21b-4015-92a1-2e8007902116
 begin
     function generate_sinc_pulse(alpha, duration;tbw = 4.0, hamming=false,dt = 0.00001)
-    t = -duration/2:dt:duration/2
-    t_center = 0
-    # Normalized time
-    tau = (t .- t_center) / (duration / 2)
-    # Sinc pulse
-    b1 = sinc.(tbw .* tau)
-    # Apply Hamming window
-    if hamming
-        window = 0.54 .+ 0.46 .* cos.(pi .* tau)
-        b1 = b1.*window
+        t = -duration/2:dt:duration/2
+        # Normalized time
+        tau = (t) / (duration / 2)
+        # Sinc pulse
+        signal = sinc.(tbw .* tau)
+        # Apply Hamming window
+        if hamming
+            a = 0.46
+            window = (1-a) .+ a .* cos.(pi .* tau)
+            signal = signal.*window
+        end
+      
+        # scale B1 to create the correct flip angle
+        γ = 267.513e6 #rad/T
+    
+        signal = alpha / (γ * abs(sum(signal) * dt)) * signal
+      return signal
     end
-  
-    # scale B1 to create the correct flip angle
-    γ = 267.513e6 #rad/T
-    Kshape = abs(sum(b1) * dt)
-    B1peak = alpha / (γ * Kshape)
 
-      return b1*B1peak
-    end
-    lines(generate_sinc_pulse(pi/2,0.001;tbw = 4.0, hamming=false))
+  function normalize_flip_angle(signal, dwell, flip_angle)
+    return signal = flip_angle / (2π * γ * abs(sum(signal) * dwell)) .* signal
+  end
+    lines(generate_sinc_pulse(pi/2,0.001;tbw = 8.0, hamming=false))
 end
 
-# ╔═╡ 97d29851-37ff-434b-9e25-61b45c6e02a9
-   waveform = @. (1 - apodization + apodization * cos(2π * tt / duration)) *
-        sinc(time_bw_product * tt / duration)
-
-# ╔═╡ d8751a14-fcdb-4cdd-98ba-6c50bf149da8
+# ╔═╡ bb028db2-0c59-4d1f-a819-9debe2a199d6
 md"""
 We can use it with **KomaMRI** to create a RF object
+
+You can see in the next example how easy it is to create a sequence and to visualize the it :
+```julia
+seq = Sequence()
+rf = RF(rf, Trf, 0 )
+G = Grad(Gz,Trf)
+@addblock seq += (rf,z=G)
+@addblock seq += (z=Grad(-Gz/2,Trf))
+plot_seq(seq;height=380, max_rf_samples=Inf, slider=false)
+```
 """
 
 # ╔═╡ b63c272f-30c9-4963-a465-60062bc73005
 begin
-	function koma_sinc()
-		Trf = 0.003
-		dt = 0.00001
-		rf = generate_sinc_pulse(alpha,Trf;tbw = 4.0, hamming=false,dt = dt)
+	function koma_script(;alpha = 30/180*pi, Trf = 1e-3,hamming=true,tbw = 4.0, Gz=5e-3)
+	
+		fmax = tbw/Trf
+		
+		#Gz = fmax / (γ * zmax);
 
-		#Scale B1
+		zmax = fmax/(γ*Gz)
+		z = range(4*-zmax, 4*zmax, 400)
+	
 		# KomaMRI.jl parts
+		rf = generate_sinc_pulse(alpha,Trf;tbw = tbw, hamming=hamming,dt=1e-5)
+	
+			
 		seq = Sequence()
-		rf = RF(rf*2, Trf, 0 )
-		#=
-		T = 1e-3 #bw 1200hz
-		zmax = 2e-2
-		fmax = 5e3
-		z = range(-zmax, zmax, 400)
-		Gz = fmax / (γ * zmax);
-		f = γ * Gz * z
-		
-		alpha = pi
-		B1peak = alpha /(γ * 2pi * T)
-		rf = RF(B1peak, T, 0 )
-		G = Grad(0.02, T)
-		G2 = Grad(-0.01, T)
-		@addblock seq += (z=G,rf)
-		@addblock seq += (z=G2)
-		p2 = plot_seq(seq; height=380, max_rf_samples=Inf, slider=false)
-		
-		
-		sim_params = Dict{String, Any}("Δt_rf" => T / length(seq.RF.A[1]))
-		M =  simulate_slice_profile(seq; z=range(-zmax*10, zmax*10, 400), sim_params)
-		lines(imag.(M.xy))
-		=#
+		rf_koma = RF(rf, Trf, 0 )
+		G = Grad(Gz,Trf)
+		@addblock seq += (rf_koma,z=G)
+		@addblock seq += (z=Grad(-Gz/2,Trf))
+	 
+		sim_params = Dict{String, Any}("Δt_rf" => Trf / length(seq.RF.A[1]))
+		M =  simulate_slice_profile(seq; z=z, sim_params)
+		return seq, M, z,rf
 	end
-	#koma_sinc()
-
 	
-	alpha=30/180*pi
-
-	
-	#Scale B1
-	sys = Scanner() #hide
-	zmax = 2e-2
-	Trf = 3.2e-3
-	fmax = 5e3
-	B1peak = 4.92e-6
-	z = range(-zmax, zmax, 400)
-	Gz = fmax / (γ * zmax);
-	f = γ * Gz * z; #hide
-	
-	seq1 = PulseDesigner.RF_sinc(B1peak, Trf, sys; G=[0;0;Gz], TBP=8)
-	seq1=seq1[1]
-	sim_params = Dict{String, Any}("Δt_rf" => Trf / length(seq1.RF.A[1]))
-	
-	M1 =  simulate_slice_profile(seq1; z=range(-zmax, zmax, 400), sim_params)
-
-		#plot_seq(seq; height=380, max_rf_samples=Inf, slider=false)
-	
-	
-	
-	# KomaMRI.jl parts
-	rf2 = generate_sinc_pulse(alpha,Trf;tbw = 4.0, hamming=true,dt=1.07e-5)
-
-	seq2 = Sequence()
-	rf = RF(rf2*B1peak, Trf, 0 )
-	G = Grad(Gz,Trf)
-	@addblock seq2 += (rf,z=G)
-
-	sim_params = Dict{String, Any}("Δt_rf" => Trf / length(seq2.RF.A[1]))
-	M2 =  simulate_slice_profile(seq2; z=range(-zmax, zmax, 400), sim_params)
-
-	
-
-	
-	lines(abs.(seq1.RF[1].A)/B1peak,label = "koma sinc : $(length(seq1.RF[1].A))")
-	lines!(current_axis(),abs.(rf2),label="my sinc : $(length(rf2))")
-	axislegend(current_axis())
-	current_figure()
-
-	lines(abs.(M1.xy),label = "koma sinc")
-	lines!(current_axis(),abs.(M2.xy),label="my sinc")
-	axislegend(current_axis())
-	current_figure()
-	
-#plot_seq(seq1; height=380, max_rf_samples=Inf, slider=false)
-	
+	seq ,M1,z1 = koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 2.0,Gz = 5e-3)
+	seq2 ,M2,z2 = koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 8.0,Gz = 5e-3)
+	plot_seq(seq;height=380, max_rf_samples=Inf, slider=false)
 	
 end
+
+# ╔═╡ 8561d8d7-5ffc-4065-aaf8-353b83c27228
+begin
+	f = Figure()
+	ax=Axis(f[1,1],xlabel = "z position [mm]")
+	lines!(ax,z1*1000,abs.(M1.xy),label = "M1")
+	lines!(ax,z2*1000,abs.(M2.xy),label = "M2")
+	axislegend(ax)
+	f
+end
+
+# ╔═╡ 0e6e2c37-af8b-46d6-a069-b59ee7391449
+begin
+	# Note : @suppress is used to remove log outputs from Koma
+	function answer_slice()
+	seq ,M1,z1 = @suppress koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 2.0,Gz = 5e-3)
+	seq ,M2,z2 = @suppress koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 8.0,Gz = 20e-3)
+	plot_seq(seq;height=380, max_rf_samples=Inf, slider=false)
+
+	f = Figure()
+	ax=Axis(f[1,1],xlabel = "z position [mm]")
+	lines!(ax,z1*1000,abs.(M1.xy),label = "M1")
+	lines!(ax,z2*1000,abs.(M2.xy),label = "M2")
+	axislegend(ax)
+	f
+	end
+	println("Answer function")
+end
+
+# ╔═╡ 926d630b-45d3-4540-a431-01db6da2d595
+md"""
+
+**Tuning and Adjusting the Time-Bandwidth Product ($\text{TBW}$)**
+
+A **Trade-off** is necessary, increasing the TBW makes the slice profile squarer but :
+
+- it requires to increase the gradient intensity
+- it also increase the $B_1peak$
+
+**Conclusion :**
+
+The SINC function is one of the most common RF pulse in MRI experiments. However you can see that the profile gives poor results with a lot of ripple (inside and outside the main lobe).
+
+This is the reason why they are **apodized**, we will see this effect in the next section
+"""
 
 # ╔═╡ bdb3a5c5-3357-46ae-a5d7-2f3ac836c2f7
 md"""
@@ -798,13 +829,54 @@ begin
 		fig = Figure()
 		ax = Axis(fig[1,1])
 		for t in Trf
-			res = t .* sinc.(pi.* f.* t)
+			res = t .* sinc.(f.* t)
 			lines!(ax,f,res,label = "Trf = $t")
 		end
 		axislegend(ax)
 		return fig
 	end
+	println("Answer code")
 end
+
+# ╔═╡ fe69cf0d-db00-43be-82f8-b9bab2025b89
+md"""
+One solution is to filter the RF envelop in order to bring the envelop smoothly to zero and reduced truncation effects. This is called **apodization**.
+
+The most widely used windowing functions belong to the generalized cosine-sum family:
+
+$$w(t) = (1 - \alpha) + \alpha \cos\left(\frac{2\pi t}{T}\right)$$
+
+with $\alpha = 0.46$, we called this function the hamming window.
+
+**Let's see the effect**
+"""
+
+# ╔═╡ 4cdf944e-9fa4-4151-a91b-033f2250fbf4
+begin
+	# Note : @suppress is used to remove log outputs from Koma
+	function fig_apodization()
+	seq ,M1,z1,rf1 = @suppress koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 4.0,Gz = 5e-3)
+	seq ,M2,z2,rf2 = @suppress koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=true,tbw = 4.0,Gz = 5e-3)
+
+	f = Figure()
+	ax=Axis(f[1,1])
+	lines!(ax,rf1,label = "no apodization")
+	lines!(ax,rf2,label = "apodization")
+	axislegend(ax)
+		
+	ax=Axis(f[2,1],xlabel = "z position [mm]")
+	lines!(ax,z1*1000,abs.(M1.xy),label = "no apodization")
+	lines!(ax,z2*1000,abs.(M2.xy),label = "apodization")
+	axislegend(ax)
+	f
+	end
+	fig_apodization()
+end
+
+# ╔═╡ 0ef6a166-43c9-4306-916a-8ad168ed0070
+md"""
+# Adiabatic pulse
+"""
 
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
 md"""
@@ -883,12 +955,23 @@ What is the value in $\micro$T of a hard pulse of 0.196 ms in order to generate 
 
 # ╔═╡ 231e32ad-fb39-4f68-9f86-9a47215bcb50
 md"""
-Our envelopped is normalized with the flip angle, thus :
+Our envelopped is scaled with the flip angle, which means :
+
+$$\int \text{rf}(t)dt = \alpha$$
 	
-$$B1_\text{peak} = \frac{\int \text{rf}(α)d\alpha}{γ \ T_{\text{rf}}}$$
+$$B1_\text{peak} = \frac{\alpha}{γ \ T_{\text{rf}}}$$
 	
 B1 peak ≈ $(round(Int,10e6*answer3())) uT
 """  |> answer_blurred
+
+# ╔═╡ 0c2a6e9b-79e4-4f25-9917-edabbf811611
+md"""
+Note that in order to obtain a specific amplitude in $\mu$T, the power send to the coil (Watt) should be defined carefully. 
+
+In order to do so a specific scan is always implemented at the beginning of a MR protocol which generally measure the power to generate a 90° with a RECT pulse of 1 ms. When it is done, the power for a different pulse is calculated using the formula :
+	
+$$W^{RF} = B_1^{RF}peak * \frac{W^{ref}}{B_1^{ref}peak}$$
+""" |> note
 
 # ╔═╡ 2bfc3f08-5668-458c-9561-84427f34e509
 md"""
@@ -928,6 +1011,28 @@ md"""
 - A 180° pulse is an inversion rf pulse. In order to see the effect we need to plot the Mz component (here : M[3])
 """ |> answer_blurred
 
+# ╔═╡ 54ddbf15-98b1-49cd-99f2-04196bc76ff6
+md"""
+- Can you explain the difference in slice selectivity between the 2 pulses ?
+- Edit the parameter of this function in order to get the same slice : 
+	seq ,M2,z2 = koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 2.0,Gz = 5e-3)
+- After fixing the slice selectivity, do you observe something else ?
+""" |> question 
+
+# ╔═╡ 83a5c738-b186-4ba9-ac94-d115d5f1de83
+md"""
+The TBW = 4 means that the $\Delta f_2 = 2 \Delta f_1$
+
+---
+	
+In order to get the same slice selectivity, the gradient Gz should be increased by 2
+$(answer_slice())
+
+---
+
+You can observe that increasing the TBW yields to a squarer slice profile with steeper edges (shorter transition zones) and reduced out-of-slice signal contamination.
+""" |> answer_folded
+
 # ╔═╡ c09f5c2c-40c6-4ad4-b8fc-51916ed40de5
 md"""
 What happens to the slice profile as $T_\text{rf}$ increase ?
@@ -940,10 +1045,10 @@ You can plot the right part function of the equation and check how the function 
 
 # ╔═╡ b9bdf04a-09a8-4537-9a76-526dba0f7676
 md"""
-As $T\text{rf}$ increase, the sinc function became sharper.
+As $T_\text{rf}$ increase, the sinc function became sharper.
 $(Answer3())
 
-Thus, for $T\text{rf} = +\text{Inf}$ :
+Thus, for $T\text{rf} = +\text{Inf}$, the function becames a dirac which means that the convolution as no effect$
 	
 $$B_1(t) = B_\text{1,ideal}(t)$$
 """ |> answer_folded
@@ -986,6 +1091,7 @@ PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [compat]
 FFTW = "~1.10.0"
@@ -997,6 +1103,7 @@ PlutoPlotly = "~0.6.6"
 PlutoTeachingTools = "~0.4.7"
 PlutoUI = "~0.7.83"
 ShortCodes = "~0.3.6"
+Suppressor = "~0.2.8"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1005,7 +1112,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "0f01e641763bcf75ea0026fa6690a88574b86d32"
+project_hash = "df0ff82e6d27b179fcdba50bf501a06541b0bc48"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -3299,6 +3406,12 @@ deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
 version = "7.8.3+2"
 
+[[deps.Suppressor]]
+deps = ["Logging"]
+git-tree-sha1 = "6dbb5b635c5437c68c28c2ac9e39b87138f37c0a"
+uuid = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
+version = "0.2.8"
+
 [[deps.TOML]]
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
@@ -3843,27 +3956,37 @@ version = "1.13.0+0"
 # ╟─13ed0746-d40a-44e6-a43b-8489bbdc21ad
 # ╠═acd24a2f-4806-44a8-9444-d19e913edbe5
 # ╟─6a474735-3584-45da-bf4b-b52d0bc0f00e
-# ╠═ced0c121-905e-4da5-a072-bf19e8287924
-# ╠═231e32ad-fb39-4f68-9f86-9a47215bcb50
+# ╟─ced0c121-905e-4da5-a072-bf19e8287924
+# ╟─231e32ad-fb39-4f68-9f86-9a47215bcb50
+# ╟─0c2a6e9b-79e4-4f25-9917-edabbf811611
 # ╟─501e1529-ec9b-4d42-8cd6-c8a4a1f79674
 # ╟─2bfc3f08-5668-458c-9561-84427f34e509
 # ╟─51a21488-e2fd-4d60-8167-aa7e3784e023
-# ╠═b32ba2bc-42d1-4e1d-9c43-cdb387b43199
-# ╠═9d4529d5-9547-428a-ad3c-af3c7a65c859
+# ╟─b32ba2bc-42d1-4e1d-9c43-cdb387b43199
+# ╟─9d4529d5-9547-428a-ad3c-af3c7a65c859
 # ╟─54a9ab35-0a25-4bcd-9175-669319076c7c
 # ╟─4315054c-11b2-45dd-9b0f-d03d000501fd
 # ╟─02ea7895-6d0e-4eb4-8950-67e7dcca801a
 # ╟─080c56cb-ea2f-49cc-81ef-8a62107fbafb
 # ╟─c2dabcd7-4ab8-4be2-a3be-3ed284eeeed9
+# ╟─7cba0ec0-949f-4626-941e-ded9da60b623
+# ╟─f498d8d7-0793-4df5-91f1-3709c4b9b1ce
 # ╠═b116f4bc-f21b-4015-92a1-2e8007902116
-# ╠═97d29851-37ff-434b-9e25-61b45c6e02a9
-# ╟─d8751a14-fcdb-4cdd-98ba-6c50bf149da8
+# ╟─bb028db2-0c59-4d1f-a819-9debe2a199d6
 # ╠═b63c272f-30c9-4963-a465-60062bc73005
+# ╠═8561d8d7-5ffc-4065-aaf8-353b83c27228
+# ╟─54ddbf15-98b1-49cd-99f2-04196bc76ff6
+# ╟─0e6e2c37-af8b-46d6-a069-b59ee7391449
+# ╟─83a5c738-b186-4ba9-ac94-d115d5f1de83
+# ╟─926d630b-45d3-4540-a431-01db6da2d595
 # ╟─bdb3a5c5-3357-46ae-a5d7-2f3ac836c2f7
 # ╟─c09f5c2c-40c6-4ad4-b8fc-51916ed40de5
 # ╟─e42cd377-804c-4ed5-9ee2-654bacc42aca
 # ╟─4acbbbf9-37d6-445d-af93-45003b4a1883
-# ╠═b9bdf04a-09a8-4537-9a76-526dba0f7676
+# ╟─b9bdf04a-09a8-4537-9a76-526dba0f7676
+# ╟─fe69cf0d-db00-43be-82f8-b9bab2025b89
+# ╠═4cdf944e-9fa4-4151-a91b-033f2250fbf4
+# ╠═0ef6a166-43c9-4306-916a-8ad168ed0070
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
 # ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╠═71e31c86-ba5e-452b-8233-bc44861fdfa6

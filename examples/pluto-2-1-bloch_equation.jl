@@ -774,6 +774,8 @@ Bloch simulation is a useful tool for MR signal and can be easily extended to in
 - Magnetization Transfert (MT)
 - Diffusion
 
+It is also espcially useful to simulate **RF excitation slice-profile**, more on that in a dedicated course !
+
 You can find various ressources online that implement Bloch-Simulation (non exhaustive list):
 
 - BlochSim.jl - **julia**
@@ -808,10 +810,10 @@ begin
     note(text) = Markdown.MD(Markdown.Admonition("note", "note", [text]));
 	answer_blurred(text) = Markdown.MD(Markdown.Admonition("tip", "Answer", [text]));
 	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]));
-    green_folded(title, text) = @htl("""
+    answer_folded(text) = @htl("""
     <details class="admonition info" style="background-color: #f1f8e9 !important; border-left-color: #2e7d32 !important; display: block; margin: 1em 0; padding: 0; border-left-style: solid; border-left-width: .4rem; border-radius: .2rem; box-shadow: 0 .2rem .5rem rgba(0,0,0,.05), 0 0 .05rem rgba(0,0,0,.1); overflow: hidden;">
       <summary class="admonition-title" style="cursor: pointer; font-weight: bold; padding: .6rem 1rem .6rem 2rem; background-color: rgba(46, 125, 50, 0.1); color: #1b5e20; border-bottom: 1px solid rgba(46, 125, 50, 0.1); user-select: none;">
-        $title
+        Answer
       </summary>
       <div class="admonition-content" style="padding: 1rem;">
         $text
@@ -842,8 +844,7 @@ $$M_2 = A_2 A_1 M_0$$
 """ |> hint
 
 # ╔═╡ 67483df1-8124-48f0-8336-632186abc9fa
-green_folded("Answer",
- md"""
+md"""
 
 To prove that the $3 \times 3$ affine formulation ($A\vec{M} + B$) and the $4 \times 4$ homogeneous formulation are strictly equivalent after two consecutive steps, it is sufficient to expand the matrix product of the $4 \times 4$ method and project it onto the $3 \times 3$ space.
 
@@ -912,7 +913,7 @@ $$\vec{M}(2) = A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2$$
 This result is **strictly identical** to the expression obtained with the standard $3 \times 3$ method expanded in your hint ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
 
 Therefore, the $4 \times 4$ formulation allows embedding the translation (the $B$ term related to $T_1$ recovery) directly into a single matrix multiplication, which is much more efficient for chaining events (RF, gradients, relaxation) within a Bloch simulator. 
- """)
+ """ |> answer_folded
 
 # ╔═╡ 57809a43-2ff0-4758-b3f1-34a204b6fd07
 md"""
@@ -944,7 +945,6 @@ end
 """ |> hint
 
 # ╔═╡ 01a9ff7d-d6ab-48e7-aa42-e12921ced76b
-green_folded("Answer",
 md"""
 Using the following function :
 ```julia
@@ -976,7 +976,7 @@ For **dt = 5000 ms** :$M =$ $(latexify_md(M_3))
 For 600 ms and 5s,  almost all the magnetization along the Y axis is gone )  due to the $T_2$ decays (dt > 5 * $T_2$).
 
 For dt = 5 s, the magnetization is almost back at the state where all the magnetization is along the $B_0$ axis because dt > 5 * $T_1$)
-""")
+""" |> answer_folded
 
 # ╔═╡ a564a238-d7b8-4e61-9827-920805e675bb
 md"""
@@ -984,10 +984,9 @@ What happens if we apply a rotation along the Z-axis at the equilibrium M = [0,0
 """ |> question
 
 # ╔═╡ d59ad369-c95c-462d-90a3-2bf47780aed3
-green_folded("Answer",
 md"""
 Nothing, you can verify with the code.
-""")
+""" |> answer_folded
 
 # ╔═╡ 0f03a903-fcd4-4a42-829b-e612f79bf6f1
 md"""
@@ -995,14 +994,13 @@ What is the relation between the time step dt used in the recovery function and 
 """ |> question
 
 # ╔═╡ 9e19225b-fcea-43c4-ae5e-701d87e67396
-green_folded("Answer",
 md"""
 The relation is between the off-resonance (in ms) and the angle in radiant is :
 			 
 $$\phi = 2 * \pi * \frac{df}{1000}$$
 
 The division by 1000 is used to convert in seconds.			 
-""")
+""" |> answer_folded
 
 # ╔═╡ 5265d9da-a2ae-4cda-be3b-ca7dc50de002
 md"""
@@ -1044,10 +1042,9 @@ end
 """ |> hint
 
 # ╔═╡ ebd0f73a-5eda-4d8c-be35-4daefc7be84e
-green_folded("Answer",
  md"""
  $(plot_magnetization(M_hz)[1])
- """)
+ """ |> answer_folded
 
 # ╔═╡ fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
 md"""
@@ -1079,7 +1076,6 @@ You don't need to simulate every time point, you can apply :
 """ |> hint
 
 # ╔═╡ 41d4af71-17b4-462e-aeb2-fd416d646eac
-green_folded("Answer",			
 md"""
 1. For df = 0 Hz : $M =$ $(latexify_md(M_ge_tr1_0hz))
 			 
@@ -1089,7 +1085,7 @@ The signal for Mx and My are different, this is due to the off resonance.
 3. When we use the magnitude of the signal, we now obtain the same value : 
 			 
 $M =$ $(latexify_md(Mxy_tr1_50hz)) but we loose the phase information that might be important for some applications (flow encoding, MR thermometry, elastrography).
- """)
+ """ |> answer_folded
 
 # ╔═╡ d69493bf-77a2-4512-be9c-da1332ba75e4
 md"""
@@ -1101,7 +1097,6 @@ md"""
 """ |> question
 
 # ╔═╡ 8ff98244-b390-45f1-9b3c-875945da4550
-green_folded("Answer",
 md"""
 $(f2)
 
@@ -1110,7 +1105,7 @@ The magnitude of the signal reach a constant value after a few TR.
  **The constant value of the magnetization vector is called the steady state.**
 
  The number of TR required to reach this state is dependant of the flip angle but also of other physical variable of the isochromat (T1,T2...)
-""")
+""" |> answer_folded
 
 # ╔═╡ 6f418850-5510-4c80-b7e2-07c6f7e6bfb4
 md"""
@@ -1127,14 +1122,13 @@ The steady-state calculated by the analytical equation is MZss
 """ |> hint
 
 # ╔═╡ b302bd6d-4c84-407e-8f09-ccb117514877
-green_folded("Answer",
 md"""
 $$Aeq = Spoil \  A_{tr} \ R_\alpha$$
 
 And Mss = $(latexify_md(Mss))
 
 The Z component is equal to the analytical solution
-""")
+"""  |> answer_folded
 
 # ╔═╡ 6ac9e5f5-5a83-4348-82b9-1577aff52c90
 md"""
@@ -1158,11 +1152,10 @@ md"""
 """ |> question
 
 # ╔═╡ 5a0fc2b1-09ce-41b7-bfb9-cdae625067a3
-green_folded("Answer",
 md"""
  1. The green curves follow the magnitude of a sinc function. 
  2. This phenomenon is due to the fact that we observe a random choice of off-resonant isochromate +/- 15 Hz. With sufficient isochromate it should looks like a box function and it's Fourier transform is a sinc function.
-""")
+""" |> answer_folded
 
 # ╔═╡ 484d1abc-0b1c-46a4-95aa-0fed3e124db9
 md"""
@@ -1172,7 +1165,6 @@ md"""
 """ |> question
 
 # ╔═╡ ce4ef0fe-7821-493c-8064-d82eb1fc34ff
-green_folded("Answer",
 md"""
 
 **1.**
@@ -1188,7 +1180,7 @@ During the 180 and TE the dephasing still occurs and bring all the spin in phase
 The signal decrease we observed at TE is only due to the $T_2$ effect :
 			 
 			 $$S(TE) = M_0 \exp{-\frac{TE}{T2}}$$
-""")
+"""  |> answer_folded
 
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
 html"""
