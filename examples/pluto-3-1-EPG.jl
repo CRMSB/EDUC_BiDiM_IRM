@@ -33,7 +33,7 @@ html"""
 	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 2: The Extended Phase Graph framework
+			Lesson 3: The Extended Phase Graph framework
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
 			Nadège Corbin
@@ -1072,7 +1072,7 @@ begin
 	fig_22c=Figure()
 	  ax=Axis(fig_22c[1,1],xlabel="df",ylabel="Amplitude")
 	for tr in 10:10:30
-	Sig=zeros(ComplexF64,401)
+	local Sig=zeros(ComplexF64,401)
 		for ind in 0:400
 			df=-200+ind
 			local S=bSSFP(tr,30*pi/180,0,200,1000,100,df)
@@ -1088,7 +1088,7 @@ begin
 	fig_22d=Figure()
 	  ax_22d=Axis(fig_22d[1,1],xlabel="df",ylabel="Amplitude")
 	for phi in 0:60:180
-	Sig=zeros(ComplexF64,401)
+	local Sig=zeros(ComplexF64,401)
 		for ind in 0:400
 			df=-200+ind
 			local S=bSSFP(10,30*pi/180,phi*pi/180,200,1000,100,df)
@@ -3604,7 +3604,7 @@ version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═c75a6f71-b75e-4269-8c80-0597bb15d96a
+# ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
 # ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╠═95e43cd5-9266-4eff-ad38-ab2393985ffd
 # ╠═9fd5b724-4634-4fd9-b397-bc1e8161394d
