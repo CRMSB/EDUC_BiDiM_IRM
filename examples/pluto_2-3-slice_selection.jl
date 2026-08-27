@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
 begin
 	# Layout ..
@@ -18,9 +30,10 @@ begin
 	# Plot
 	using GLMakie
 	using PlutoPlotly
-
+	
 	# math
 	using FFTW
+	using DSP
 	using LinearAlgebra
 	using KomaMRI
 	PlutoUI.TableOfContents()
@@ -33,7 +46,7 @@ html"""
 	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 3: Slice-Selection
+			Lesson 3: Slice-Selection and RF pulse design
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
 			Aurélien Trotier
@@ -42,20 +55,6 @@ html"""
 			CRMSB - Université de Bordeaux / CNRS
 		</p>
 	</div>
-"""
-
-# ╔═╡ 36de82dc-02cb-494e-b83b-f6cbedf0711e
-md"""
-# TO DO
-- TBWP ?
-- SLR pulse
-- adiabatic
-- SMS
-
-- Disccusion : 
-  - optimal control
-  - PINS
-
 """
 
 # ╔═╡ b50b352b-e1ef-45ae-992f-51adcc1f2da8
@@ -178,6 +177,11 @@ $$\alpha = \gamma \cdot B_{1,\text{max}} \cdot T \cdot K_{\text{shape}}$$
 
 where $K_{\text{shape}} = \int_{0}^{T} |b_1(t)| \, dt$ and $b_1(t) = \frac{B_1(t)}{B_{1,\text{max}}}$.
 
+"""
+
+# ╔═╡ 98153325-6af6-4d18-a9c4-e2d68563f134
+md"""
+
 ### Bandwidth ($\Delta f$)
 The range of frequencies excited by the pulse. In the presence of a magnetic field gradient ($G_z$), this frequency bandwidth maps directly to a physical spatial location and determines the slice thickness ($\Delta z$):
 
@@ -195,20 +199,25 @@ $$\text{FWHM} = \frac{K_{\text{BW}}}{T}$$
 where $K_{\text{BW}}$ is a dimensionless shape factor dependent on the pulse envelope profile (e.g., $K_{\text{BW}} \approx 1.21$ for a standard 3-lobe Sinc pulse, or $1.00$ for a rectangular pulse).
 
 #### Time-Bandwidth Product (TBP or TBWP)
-The **Time-Bandwidth Product** is a dimensionless figure of merit defined as the product of the total pulse duration $T$ and its frequency bandwidth $\Delta f$:
+The **Time-Bandwidth Product** is a dimensionless value defined as the product of the total pulse duration $T$ and its frequency bandwidth $\Delta f$:
 
 $$\text{TBP} = T \cdot \Delta f$$
 
 * **Selectivity:** A higher TBP results in a sharper slice profile with steeper edges and less out-of-slice excitation (at the cost of requiring longer duration $T$ or higher peak $B_{1,\text{max}}$).
 * **Shape dependence:** Standard Hamming-windowed Sinc pulses typically have $\text{TBP} \approx 4$, whereas SLR (Shinnar-Le Roux) designed pulses or high-performance multilobe pulses can achieve $\text{TBP} \approx 6 - 12+$.
 
+
+**Important :** Due to the non linearity of the bloch equation, you should simulate the effect in order to get the correct FWHM value.
 ---
 
 > **Keep in mind that these are approximations!**
 > 
 > 1. **Linearity Breakdowns:** The Small Tip Angle approximation assumes $\sin(\alpha) \approx \alpha$. It works exceptionally well for $\alpha \le 30^\circ$, but breaks down severely for large tip angles ($90^\circ$ excitation or $180^\circ$ refocusing pulses) due to the non-linear nature of the Bloch equations. For large tip angles, **SLR algorithms** or numerical Bloch simulations are necessary to accurately predict the excitation profile.
 > 2. **Truncation & Windowing:** Ideal Sinc waveforms require infinite duration. Truncating the pulse to a finite duration $T$ introduces ripples in the frequency domain (Gibbs phenomenon), which alters the true FWHM and effective TBP.
+"""
 
+# ╔═╡ 836e06b6-b0fe-4c75-9e80-c1eaa19c5f92
+md"""
 
 ### Phase / Frequency Modulation
 
@@ -246,7 +255,9 @@ Because no analytical solution exists for a forced precession and an applied gra
 md"""
 ## Bloch functions
 
-We will reuse the bloch function but additionnaly we will add a rotation with a specific phase : `throt(alpha,theta)`
+We will reuse the bloch function but additionnaly we will add a rotation with a specific phase : `throt(alpha,theta)`.
+
+This function is necessary to add a specific phase to the RF pulse for example in order to implement RF spoiling.
 """
 
 # ╔═╡ fda9c0cc-c622-4c49-aa35-04505ffd3ecc
@@ -510,6 +521,8 @@ md"""
 ## Create an RF : RECT
 In order to simulate the effect of the RF pulse we will simulate isochromate at each z position and then plot the magnetization at the end of the RF.
 
+As a first exercise we will try to use the most simple RF excitation shape : **a RECT function**
+
 First let's create a RECT function that takes as input :
 - an expected flip angle (in radian)
 - a duration
@@ -561,7 +574,7 @@ For Trf = 0.196 ms, **FWHM ≈ $(round(1.21/0.196e-3,digits = 0)) Hz**
 
 # ╔═╡ b32ba2bc-42d1-4e1d-9c43-cdb387b43199
 md"""
-## Bloch simulation : RF + Gradient
+## Bloch simulation : RF + slice selective gradient
 
 In order to simulate the slice profile, we need will simulate the magnetization in the x/y plane obtained after applying the RF at each frequency (corresponding to a dedicated spatial position in conjonction to the application of the slice selective gradient).
 
@@ -646,7 +659,7 @@ As expected, the slice profile generated by a RECT RF pulse is poorly selective 
 
 # ╔═╡ c2dabcd7-4ab8-4be2-a3be-3ed284eeeed9
 md"""
-# Simulation with KomaMRI
+## SINC RF with KomaMRI
 
 To simplify our simulation work we will use a package called **KomaMRI.jl**. It is an efficient sequence simulator using bloch equation and isochromates.
 
@@ -672,7 +685,11 @@ where $B_{1,\text{max}}$ is the peak amplitude, $t$ is time centered at $t = 0$,
 
 The excitation bandwidth $\Delta f$ (typically measured as Full Width at Half Maximum, FWHM) is inversely proportional to the pulse duration $T$:
 
-$$\Delta f = \frac{\text{TBW}}{T}$$
+$$\Delta f = \frac{\text{TBWP}}{T}$$
+
+and that the TBWP product of a SINC pulse is given by the number of zero-crossing on the right and left side :
+
+$$TBWP = T  \Delta f = N_L + N_R$$ 
 """
 
 # ╔═╡ f498d8d7-0793-4df5-91f1-3709c4b9b1ce
@@ -797,17 +814,11 @@ A **Trade-off** is necessary, increasing the TBW makes the slice profile squarer
 
 - it requires to increase the gradient intensity
 - it also increase the $B_1peak$
-
-**Conclusion :**
-
-The SINC function is one of the most common RF pulse in MRI experiments. However you can see that the profile gives poor results with a lot of ripple (inside and outside the main lobe).
-
-This is the reason why they are **apodized**, we will see this effect in the next section
 """
 
 # ╔═╡ bdb3a5c5-3357-46ae-a5d7-2f3ac836c2f7
 md"""
-# RF pulse shape and apodization
+## RF pulse shape and apodization
 
 RF pulse shape are finite in time, generally their duration  is on the order of the ms.
 
@@ -818,7 +829,7 @@ $$B_1(t) = B_\text{1,ideal}(t) \times \text{rect}(\frac{t}{T_\text{rf}})$$
 Using the small angle approximation, the inverse Fourier transformation of $B_1(t)$ leads to a frequency response (spatial response
 for the slice selection process) which is the convolution of the ideal response with a sinc function :
 
-$$B_1(f) = B_\text{1,ideal}(f) * T_\text{rf} \ \text{sinc}(\pi f T_\text{rf})$$
+$$B_1(f) = B_\text{1,ideal}(f) * T_\text{rf} \ \text{sinc}(f T_\text{rf})$$
 """
 
 # ╔═╡ 4acbbbf9-37d6-445d-af93-45003b4a1883
@@ -873,9 +884,1015 @@ begin
 	fig_apodization()
 end
 
+# ╔═╡ 0e5c33dd-3da8-4fa5-b9c1-3beb466d2d64
+md"""
+## Nonlinearity effect on slice profile
+
+As mentionned earlier, the nonlinearity of the bloch equation leads to distorted slice profile when the flip angle is large ($\approx$ > 60°), we will highlight this problem in this section.
+
+"""
+
+# ╔═╡ 4fd29083-f46b-4421-af76-e8bb973742de
+begin
+	# Note : @suppress is used to remove log outputs from Koma
+	function fig_nonlinearity()
+
+	alpha_vec =[10,60,90,150,180] #degree
+
+	f = Figure()
+	ax=Axis(f[1,1],title= "Mxy")
+	ax2=Axis(f[2,1],title= "Mz")
+		
+	for (i,alpha) in enumerate(alpha_vec)
+		seq ,M,z,rf = @suppress koma_script(alpha = alpha/180*pi, Trf = 3e-3,hamming=true,tbw = 4.0,Gz = 5e-3)
+		lines!(ax,abs.(M.xy),label = "α=$alpha")
+		lines!(ax2,M.z,label = "α=$alpha")
+		
+	end
+	axislegend(ax)
+	f
+	end
+	fig_nonlinearity()
+end
+
+# ╔═╡ 1f794004-1796-4692-ada0-0096a693782a
+md"""
+RF excitation is a non-linear physical process. At high flip angles, simple Fourier transforms fail, causing severe slice profile distortion, ripples, and unwanted out-of-slice excitation.
+
+This is the main reason why a new way to design RF pulses called **Shinnar-Le-Roux** pulse (SLR) became widely implemented in MRI and NMR. 
+
+We will discuss a little bit about their implementation as well as other important type of RF pulse in the next section
+"""
+
+# ╔═╡ 66d7c892-8406-4c0e-8cde-90334d2b997a
+md"""
+# Shinnar-Le-Roux
+
+The SLR algorithm to design a slice-selective RF is widely used by the MRI community, for example on Bruker scanner the **Calculated** RF waveform is based on this algorithm.
+
+
+
+then it is possible to recursively calculate the RF waveform.
+
+We can split this in 3 "basic" steps :
+1. Designing a slice profile as a polynomial : $B_N(z)$
+2. Choosing a compatible minimum power $A_N(z)$
+3. Performing the recursion 
+
+---
+
+**Steps 1 and 2** 
+
+The main idea is to create a slice profile under a polynomial form $B_N(z) = \sum_{k=0}^{N-1} b_k z^{-k}$  (as well as a second polynomial $$A_N(z) = \sum_{k=0}^{N-1} a_k z^{-k}$$) where **z** represent the complex spatial frequency variable :
+$$z = e^{-i \gamma G_z x \Delta t}$$
+
+Defining a compatible slice profile can be done using multiple algorithms / implementations like : 
+- sinc "ms"
+- Parks-McClellan equal-ripple "pm"
+- minphase using factored pm "min"
+- maxphase using factored pm "max"
+- least squares "ls"
+
+Most of them needs to define parameters like the TBWP, passband / stopband ripple and to optimize parameters choice. You are invited to read `Pauly et al, MRM, 1991` for more information about that
+
+**Step 3** 
+
+An inverse SLR transform is apply to calculate parameters that can be used to generate the temporal RF waveform. 
+This is done under a specific domain where rotation are performed with 2x2 unitary matrices on 2x1 complex vector called spinor (abreviated as `SU(2)` group).
+
+In `SU(2)`
+
+The SLR regression is quite complex and we won'but the idea is to use represent the rotation  propagate back the  rotation (SU(2)) in order to propagate ba the nutation of the magnetization due to RF waveform and the precession provoked by the slice gradient.
+
+
+---
+
+The SLR design concept is quite complex and we won't enter more into the details.
+You are invited to read the following bibliography :
+
+1. Pauly J, Roux PL, Nishimura D, Macovski A. Parameter Relations for the Shinnar-Le Roux Selective Excitation Pulse Design Algorithm.
+2. Bernstein, M. A., King, K. F., & Zhou, X. J. (2004). Handbook of MRI Pulse Sequences. Elsevier Academic Press. **Section 2.3**
+3. EE469b course by **John Pauly** : https://web.stanford.edu/class/ee469b/Notes.html
+
+And to take a look at the different code implementations : 
+- [Julia : KomaMRI](https://github.com/JuliaHealth/KomaMRI.jl/blob/master/KomaMRIBase/src/sequences/PulseDesigner/make_slr_pulse.jl)
+- [Python : Sigpy](https://github.com/mikgroup/sigpy/blob/main/sigpy/mri/rf/slr.py) 
+- [Matlab](https://github.com/ZZgroupSJTU/RFpulsesEducation/blob/master/SLR_Pulse_demo.m)
+"""
+
+# ╔═╡ 89c422cd-4e3d-40b9-abc3-666cdde649ed
+md"""
+## Example of polynomial slice profile
+
+Here is the minimal example using the Parks-McClellan (remez) algorithm from DSP.jl to generate $B(z)$ polynomial coefficients and evaluate the resulting profile.
+
+To prevent the scaling issues from DSP.remez, we use the optimal transition width formula slr_transition_measure from Pauly et al. to set the band edges and apply passband normalization.
+
+"""
+
+# ╔═╡ 91fabae4-b0e5-4c93-800d-9050a93889e8
+begin
+
+    function polynomial_b(;n=64,
+                           time_bw_product=8.0,
+                           flip_angle = pi/2, 
+                           passband_ripple = 0.01,
+                           stopband_ripple = 0.01)
+        
+     # Pauly et al. transition width calculation
+        function slr_transition_measure(passband_ripple, stopband_ripple)
+            log_pass = log10(passband_ripple)
+            log_stop = log10(stopband_ripple)
+            return (5.309e-3 * log_pass^2 + 7.114e-2 * log_pass - 4.761e-1) * log_stop +
+                   (-2.66e-3 * log_pass^2 - 5.941e-1 * log_pass - 4.278e-1)
+        end
+        
+        # Calculate optimal transition width and band edges
+        width = slr_transition_measure(passband_ripple, stopband_ripple) / time_bw_product
+        f_slice_half = time_bw_product / (2n) # Nominal slice edge = 0.03125
+        bands = [
+            0.0,
+            (1 - width) * f_slice_half,
+            (1 + width) * f_slice_half,
+            0.5,
+        ]
+        
+        # 2. Design FIR coefficients using Remez
+        weight = [1.0, passband_ripple / stopband_ripple]
+        b_raw = remez(n, bands, [1.0, 0.0]; weight=weight)
+        
+        # 3. Scale coefficients to target flip angle (sin(α/2))
+        f_pass_edge = bands[2]
+        f_grid = range(-0.15, 0.15, length=1000)
+        
+        # Evaluate raw response to find passband gain
+        B_raw = [sum(b_raw[k] * exp(-im * 2π * f * (k - 1)) for k in 1:n) for f in f_grid]
+        passband_peak = maximum(abs.(B_raw[abs.(f_grid) .<= f_pass_edge]))
+        
+        # Normalize polynomial coefficients
+        target_gain = sin(flip_angle / 2)
+        b_coeffs = b_raw .* (target_gain / passband_peak)
+        
+        # 4. Evaluate polynomial B(z) and construct Ideal Rectangular Profile
+        B_profile = [sum(b_coeffs[k] * exp(-im * 2π * f * (k - 1)) for k in 1:n) for f in f_grid]
+        ideal_profile = [abs(f) <= f_slice_half ? target_gain : 0.0 for f in f_grid]
+        
+        # 5. Plot with CairoMakie
+        fig = Figure(size = (700, 375))
+        ax = Axis(fig[1, 1], 
+            title = "Remez-designed B(z) Profile vs. Ideal Target",
+            xlabel = "Normalized Frequency (f)",
+            ylabel = "|B(z)| Amplitude"
+        )
+        
+        # Ideal Boxcar Target Profile
+        lines!(ax, f_grid, ideal_profile, color = :gray40, linestyle = :dash, linewidth = 2, label = "Ideal Target")
+        
+        # Polynomial Response
+        lines!(ax, f_grid, abs.(B_profile), color = :crimson, linewidth = 2.5, label = "Remez B(z) Profile")
+        
+        # Band Edges
+        vlines!(ax, [-bands[2], bands[2]], color = :blue, linestyle = :dot, label = "Passband Edge")
+        vlines!(ax, [-bands[3], bands[3]], color = :orange, linestyle = :dot, label = "Stopband Edge")
+        
+        axislegend(ax, position = :rt)
+        return fig
+    end
+    fig = polynomial_b()
+end
+
+# ╔═╡ abfbc789-ca8d-4d94-ba3f-463e2d89a7b0
+md"""
+This slice profile is then used to compute recursively the RF waveform
+"""
+
+# ╔═╡ c9f11338-622c-466d-8da6-77482ebdcc1c
+md"""
+## SINC vs SLR for excitation
+
+SLR pulse became useful for large flip angle, either for excitation, saturation, inversion or refocuse RF pulse.
+
+First we will take a look at the effect as an excitation pulse. We will use the implementation available in **KomaMRI.jl** to generate the RF waveform.
+
+The parameters available to us are :
+- flip angle
+- duration
+- slice thickness,
+- time bandwidth product
+- passband ripple,
+- stopband ripple,
+- type of excitation (Excitation(), Inversion()...)
+- filter type : algorithm used to calculate the RF waveform (:ms, :pm, :min, :max, **:ls**)
+
+In our case we will use the **:ls least square algorithm** that seems to give better results and is also recommanded by Pauly in his course EE269b
+"""
+
+# ╔═╡ af940e86-96ba-4539-8f61-7d01b4ba9499
+begin
+	function SINC_vs_SLR(;alpha=pi/2,filter_type = :ms,band_ripple=0.001,exc_type=Exception())
+		sys = Scanner() #hide
+
+		Trf = 3.2e-3
+		zmax = 5e-3
+		thickness = 0.005
+	
+		z = range(-zmax, zmax, 400)	
+	
+		# Build sinc sequence
+		rf_sinc, gz_sinc, gzr_sinc = KomaMRI.PulseDesigner.make_sinc_pulse(alpha; 
+							  duration=Trf, 
+							  slice_thickness=thickness, 
+							  apodization=0.5, 
+							  time_bw_product=8, sys)
+		seq_sinc = Sequence(sys)
+		addblock!(seq_sinc, rf_sinc; z=gz_sinc)
+	    seq_sinc.DUR[end] = ceil_to_raster(dur(seq_sinc[end], sys), sys.DUR_Δt)
+	    addblock!(seq_sinc; z=gzr_sinc)
+			
+		sim_params = Dict{String, Any}("Δt_rf" => Trf / length(seq.RF.A[1]))
+		M_sinc =  @suppress simulate_slice_profile(seq_sinc; z=z, sim_params)
+	
+		## SLR parts
+	
+		rf_slr, gz_slr, gzr_slr = KomaMRI.PulseDesigner.make_slr_pulse(alpha; 
+												 duration=Trf, 
+												 slice_thickness=thickness, 
+												 time_bw_product=8,
+												 passband_ripple=band_ripple,
+	    										 stopband_ripple=band_ripple,
+													use = exc_type, #Excitation() or Inversion()
+												 filter_type=filter_type, sys) #:ms,:pm, :min, :max, :ls
+
+		rf_slr.A=rf_slr.A[2:end-1] # bug that requires to remove the first and last point
+		seq_slr = Sequence(sys)
+		addblock!(seq_slr, rf_slr; z=gz_slr)
+	    seq_slr.DUR[end] = ceil_to_raster(dur(seq_slr[end], sys), sys.DUR_Δt)
+	    addblock!(seq_slr; z=gzr_slr)
+	
+		  sim_params = Dict{String, Any}("Δt_rf" => Trf / length(seq.RF.A[1]))
+		M_slr =  @suppress simulate_slice_profile(seq_slr; z=z, sim_params)
+
+		############# Figure
+		f = Figure(size=(800,800))
+		ax=Axis(f[1,1],title = "RF waveform")
+		lines!(ax,abs.(rf_sinc.A),label = "SINC")
+		lines!(ax,abs.(rf_slr.A),label = "SLR filter = :$filter_type")
+		axislegend(ax)
+		
+			
+		ax=Axis(f[2,1],title = "|Mxy|",xlabel = "z position [mm]")
+		lines!(ax,z*1000,abs.(M_sinc.xy),label = "SINC")
+		lines!(ax,z*1000,abs.(M_slr.xy),label = "SLR filter = :$filter_type")
+		axislegend(ax)
+		vlines!(ax,[-thickness,thickness]/2*1000,color=:red,linestyle=:dot)
+
+		 	#Mz visualization for inversion
+		ax=Axis(f[3,1],title = "Mz",xlabel = "z position [mm]")
+		lines!(ax,z*1000,M_sinc.z,label = "SINC")
+		lines!(ax,z*1000,M_slr.z,label = "SLR filter = :$filter_type")
+		axislegend(ax)
+		
+		
+		vlines!(ax,[-thickness,thickness]/2*1000,color=:red,linestyle=:dot)
+		f
+	return f
+		
+	end
+
+	SINC_vs_SLR(alpha = pi/2,filter_type = :ls,band_ripple = 0.01,exc_type = Excitation()) #:ls is the best option according to pauly course : 
+end
+
+# ╔═╡ 50f55add-c251-428e-aa5c-3f924a5a184e
+md"""
+## SLR inversion pulse
+"""
+
+# ╔═╡ 9d0bf0ec-ab59-411f-9462-728b796ebc79
+md"""
+
+In order to generate an invertion pulse with the SLR approach, the design is a little bit different. Now, we are not interested by $M_{xy}$ but by $M_z$ and the optimization parameters for the design are different which is why we pass the `Inversion()` parameters to KomaMRI.
+
+In the next figure, you can observe the degradation of the slice profile for inversion pulse $\alpha = 180°$ with the SINC waveform and that the SLR pulse gives reasonable results with :
+- a flat portion
+- correct bandwidth / slice selection
+	
+"""
+
+# ╔═╡ 7e685f0b-1524-44e3-bf76-9f0b5d12fe5f
+begin
+	SINC_vs_SLR(alpha = pi,filter_type = :ls,band_ripple = 0.01,exc_type = Inversion()) #:ls is the best option according to pauly course :
+end
+
+# ╔═╡ 2293d971-eca2-4b7f-a875-6d392ad4a31d
+md"""
+## Conclusion about SLR
+
+**Pros :**
+- SLR is a good way to create sharp, flat-topped slice profiles even at high flip angles.
+
+- Explicitely define the trade-offs between pulse length, peak RF power ($B_1\text{max}$), passband ripple, and slice sharpness. 
+
+- Specific applications are possible using "minimum-phase" (:min) option to generate asymmetric pulse shapes that reduce echo time (TE) and lower peak RF power.
+
+**Cons :**
+
+- Generally, users don't have access to such a degree of choice on the scanner. For example with `Bruker`, you can only change the duration and the TBWP.
+
+**But**, this is where pulseq sequence shines to implement advanced RF pulses.
+
+"""
+
 # ╔═╡ 0ef6a166-43c9-4306-916a-8ad168ed0070
 md"""
 # Adiabatic pulse
+
+Adiabatic RF pulse are special class of RF pulse that can excite homogeneously a volume of interest even in the precense of large $B_1$ field inhomogeneity.
+
+This property is especially interesting for 2 applications :
+
+**Use of surface/small coils to transmit the excitation** 
+
+This is still the case in small animal for specific application and also on human at field > 7T in order to reduce the RF energy deposition (SAR).
+
+**Imaging of large volume at field >= 3T**
+
+At thus field, the RF wavelengh in water/tissues is of the order or lower to the size of the body : 
+$$\lambda = \frac{c}{f \sqrt{\varepsilon_r}}$$
+
+where $\varepsilon_r$ is the relative permeativity of the water/tissue.
+This leads to destructive / constructive interferences occurs that reduce the homogeneity if the $B_1$.
+
+![](https://i.imgur.com/IyUXvcS.png)
+
+adapted from : `DOI: 10.1371/journal.pone.0091318`
+"""
+
+# ╔═╡ ddca51a1-279f-4955-a473-4169a9e85630
+md"""
+## Effective magnetic field $B_{eff}$ and adiabatic condition
+
+In the rotating frame, the magnetization vector $\vec{M}$ does not precess around the applied RF field $\vec{B}_1$ alone, but around an effective magnetic field $\vec{B}_{\text{eff}}$, defined as:
+
+$$\vec{B}_{\text{eff}}(t) = \vec{B}_1(t) + \left( B_0 - \frac{\omega(t)}{\gamma} \right) \vec{z}$$
+
+where $\omega(t)$ is the instantaneous RF frequency, $B_0$ is the main static field, and $\gamma$ is the gyromagnetic ratio.
+
+For simplicity, we will use : $\vec{B}_1(t) = B_x(t) \hat{x}$ but $B_1$ field can point in any direction in the transverse plane.
+
+The amplitude are then given by :
+
+$$||\vec{B}_{\text{eff}}(t)|| = \sqrt{B_x^2(t) + B_z^2(t)}$$
+
+and the direction of the effective field by : 
+
+$$\psi = \text{arctan}(\frac{B_x(t)}{B_z(t)})$$
+
+
+
+"""
+
+# ╔═╡ 0d27fe66-4ad9-402e-b60a-26ea2a632d0a
+begin
+
+    function fig_beff()
+    # ---------------------------------------------------------
+    # Figure & Axis Setup
+    # ---------------------------------------------------------
+    fig = Figure(size = (800, 600), backgroundcolor = :white)
+    
+    ax = Axis3(fig[1, 1], title = "Adiabatic RF pulses", 
+        aspect = :data, 
+        tellwidth = false, 
+        tellheight = false
+    )
+    
+    hidedecorations!(ax)
+    hidespines!(ax)
+    #limits!(ax, -0.2, 1.5, -0.2, 1.5, -0.2, 1.5)
+    
+    # Orient camera perspective (x bottom-left, y bottom-right, z up)
+    ax.azimuth = 0.2π
+    ax.elevation = 0.1π
+    
+    # ---------------------------------------------------------
+    # Points definition
+    # ---------------------------------------------------------
+    p_origin = Point3f(0, 0, 0)
+    p_Bx     = Point3f(0.5, 0, 0)         # Bx(t) on x-axis
+    p_Bz     = Point3f(0, 0, 1.0)         # Bz on z-axis
+    p_Beff   = Point3f(0.5, 0, 1.0)       # Beff(t) = Bx(t) + Bz(t)
+    p_M      = Point3f(0, 0, 0.65)        # Magnetization M vector
+    
+    # ---------------------------------------------------------
+    # 1. Coordinate Axes (x, y, z)
+    # ---------------------------------------------------------
+    arrows3d!(ax, [0, 0, 0], [0, 0, 0], [0, 0, 0], 
+                  [1.3, 0, 0], [0, 1.3, 0], [0, 0, 1.3], 
+                  color = :black, shaftradius = 0.001, tipradius = 0.01, tiplength = 0.06)
+    
+    text!(ax, Point3f(1.4, 0, 0), text = "x", font = :italic, fontsize = 18, align = (:center, :center))
+    text!(ax, Point3f(0, 1.4, 0), text = "y", font = :italic, fontsize = 18, align = (:center, :center))
+    text!(ax, Point3f(0, 0, 1.4), text = "z", font = :italic, fontsize = 18, align = (:center, :center))
+
+    # ---------------------------------------------------------
+    # 2. Dashed Projection Lines (Parallelogram)
+    # ---------------------------------------------------------
+    lines!(ax, [p_Bx, p_Beff], color = :black, linestyle = :dash, linewidth = 1.2)
+    lines!(ax, [p_Bz, p_Beff], color = :black, linestyle = :dash, linewidth = 1.2)
+
+    # ---------------------------------------------------------
+    # 3. Angle Psi (ψ) entre z et Beff
+    # ---------------------------------------------------------
+    # Angle entre +z et Beff
+    angle_psi = atan(p_Bx[1], p_Bz[3])
+    r_psi = 0.35f0 # Rayon de l'arc de cercle
+    t_psi = range(0, angle_psi, length=30)
+    
+    # Tracé de l'arc de cercle dans le plan (x, z)
+    pts_psi = [Point3f(r_psi * sin(θ), 0, r_psi * cos(θ)) for θ in t_psi]
+    lines!(ax, pts_psi, color = :black, linewidth = 1.5)
+    
+    # Étiquette ψ
+    p_psi_label = Point3f(r_psi * 2 * sin(angle_psi/2), 0, r_psi * 1.25 * cos(angle_psi/2))
+    text!(ax, p_psi_label, text = L"\psi", fontsize = 20, font = :italic)
+        
+    # ---------------------------------------------------------
+    # 3. Precession Cone / Circle around Beff
+    # ---------------------------------------------------------
+      t_circle  = range(0, 2π, length=150)
+    
+    axis_cone   = normalize(p_Beff)
+    center_cone = dot(p_M, axis_cone) * axis_cone
+    
+    u_vector = p_M - center_cone
+    v_vector = cross(axis_cone, u_vector)
+    
+    pts_cone = [center_cone + cos(θ) * u_vector + sin(θ) * v_vector for θ in t_circle]
+    push!(pts_cone, pts_cone[1]) # Fermeture parfaite
+
+    lines!(ax, pts_cone, 
+           linestyle =:dot,
+       color = (:red, 0.8), 
+       linewidth = 2.0, 
+       overdraw = true)
+    
+    # ---------------------------------------------------------
+    # 4. Vectors (Arrows)
+    # ---------------------------------------------------------
+    # B_x(t) vector
+    arrows3d!(ax, [0], [0], [0], [p_Bx[1]], [p_Bx[2]], [p_Bx[3]], 
+              color = :blue, shaftradius = 0.012, tipradius = 0.035, tiplength = 0.08)
+    
+    # B_z vector
+    arrows3d!(ax, [0], [0], [0], [p_Bz[1]], [p_Bz[2]], [p_Bz[3]], 
+              color = :green, shaftradius = 0.012, tipradius = 0.035, tiplength = 0.08)
+    
+    # B_eff(t) vector
+    arrows3d!(ax, [0], [0], [0], [p_Beff[1]], [p_Beff[2]], [p_Beff[3]], 
+              color = :black, shaftradius = 0.014, tipradius = 0.038, tiplength = 0.08)
+    
+    # Magnetization M vector
+    arrows3d!(ax, [0], [0], [0], [p_M[1]], [p_M[2]], [p_M[3]], 
+              color = :red, shaftradius = 0.012*2, tipradius = 0.035*2, tiplength = 0.08*2)
+    
+    # ---------------------------------------------------------
+    # 5. Mathematical Labels & LaTeX Text
+    # ---------------------------------------------------------
+    text!(ax, Point3f(0.85, 0, -0.15), 
+          text = L"\vec{B}_x(t) = A(t)\hat{x}", 
+          fontsize = 18,color=:blue)
+    
+    text!(ax, Point3f(-0.1, 0, 0.8), 
+          text = L"\vec{B}_z = \left[ B_0 - \frac{\omega_{rf}(t)}{\gamma} \right]\hat{z}", 
+          fontsize = 18,color=:green)
+    
+    text!(ax, Point3f(0.8, 0, 1.15), 
+          text = L"\vec{B}_{\text{eff}}(t) = \vec{B}_x(t) + \vec{B}_z(t)", 
+          fontsize = 18, align = (:right, :center),color=:black)
+    
+    text!(ax, Point3f(-0.04, 0, 0.60), 
+          text = L"\vec{M}", 
+          fontsize = 18,
+          color=:red)
+    
+    return fig
+
+    end
+    fig_beff()
+end
+
+# ╔═╡ d27f3b83-31be-4652-8645-0cc8783f224d
+md"""
+Unlike conventional RF pulses where $\vec{B}_{\text{eff}}$ remains stationary, adiabatic pulses continuously modulate $B_1(t)$ and $\omega(t)$, causing $\vec{B}_{\text{eff}}$ to sweep its orientation (e.g., from $+\vec{z}$ to $-\vec{z}$). 
+
+To ensure that the magnetization vector faithfully follows the direction of $\vec{B}_{\text{eff}}$ throughout this motion without decoupling, the pulse must satisfy the adiabatic condition:
+
+$$\left\vert{} \frac{d\psi}{dt} \right\vert{} \ll \gamma \Vert{}\vec{B}_{\text{eff}}(t)\Vert{}$$
+
+where $d\psi/dt$ is the angular velocity of $\vec{B}_{\text{eff}}$ and $\gamma \Vert{}\vec{B}_{\text{eff}}\Vert{}$ is the instantaneous nutation frequency of the spins around $\vec{B}_{\text{eff}}$. 
+
+Physically, this condition dictates that the rotation of the effective field must be substantially slower than the precession of magnetization around it.
+
+As long as this threshold is met, the final flip angle depends solely on the trajectory of $\vec{B}_{\text{eff}}$ and becomes immune to spatial $B_1$ inhomogeneities .
+"""
+
+# ╔═╡ 0d97ad7a-7b12-4bab-9130-7b2dc0d806a6
+begin
+
+    function fig_rf_standard()
+    # ---------------------------------------------------------
+    # Figure & Axis Setup
+    # ---------------------------------------------------------
+    fig = Figure(size = (800, 600), backgroundcolor = :white)
+    
+    ax = Axis3(fig[1, 1],  title = "Non-adiabatic RF pulses",
+        aspect = :data, 
+        tellwidth = false, 
+        tellheight = false
+    )
+    
+    hidedecorations!(ax)
+    hidespines!(ax)
+    #limits!(ax, -0.2, 1.5, -0.2, 1.5, -0.2, 1.5)
+    
+    # Orient camera perspective (x bottom-left, y bottom-right, z up)
+    ax.azimuth = 0.2π
+    ax.elevation = 0.1π
+    
+    # ---------------------------------------------------------
+    # Points definition
+    # ---------------------------------------------------------
+    p_origin = Point3f(0, 0, 0)
+    p_Bx     = Point3f(0.5, 0, 0)         # Bx(t) on x-axis
+    p_Bz     = Point3f(0, 0, 1.0)         # Bz on z-axis
+    p_Beff   = Point3f(1.0, 0, 0.0)       # Beff(t) = Bx(t) + Bz(t)
+    p_M      = Point3f(0, 0.65*sin(pi/6), 0.65*cos(pi/6))        # Magnetization M vector
+    
+    # ---------------------------------------------------------
+    # 1. Coordinate Axes (x, y, z)
+    # ---------------------------------------------------------
+    arrows3d!(ax, [0, 0, 0], [0, 0, 0], [0, 0, 0], 
+                  [1.3, 0, 0], [0, 1.3, 0], [0, 0, 1.3], 
+                  color = :black, shaftradius = 0.001, tipradius = 0.01, tiplength = 0.06)
+    
+    text!(ax, Point3f(1.4, 0, 0), text = "x", font = :italic, fontsize = 18, align = (:center, :center))
+    text!(ax, Point3f(0, 1.4, 0), text = "y", font = :italic, fontsize = 18, align = (:center, :center))
+    text!(ax, Point3f(0, 0, 1.4), text = "z", font = :italic, fontsize = 18, align = (:center, :center))
+
+    # ---------------------------------------------------------
+    # 2. Dashed Projection Lines (Parallelogram)
+    # ---------------------------------------------------------
+    #lines!(ax, [p_Bx, p_Beff], color = :black, linestyle = :dash, linewidth = 1.2)
+    #lines!(ax, [p_Bz, p_Beff], color = :black, linestyle = :dash, linewidth = 1.2)
+
+    # ---------------------------------------------------------
+    # 3. Angle Psi (ψ) entre z et Beff
+    # ---------------------------------------------------------
+    # Angle entre +z et Beff
+    angle_psi = atan(p_Bx[1], p_Bz[3])
+    r_psi = 0.35f0 # Rayon de l'arc de cercle
+    t_psi = range(0, angle_psi, length=30)
+    
+    # Tracé de l'arc de cercle dans le plan (x, z)
+    pts_psi = [Point3f(0,r_psi * sin(θ), r_psi * cos(θ)) for θ in t_psi]
+    lines!(ax, pts_psi, color = :black, linewidth = 1.5)
+
+    # Étiquette α
+    p_psi_label = Point3f(0,r_psi * 1.25 * sin(angle_psi/2), r_psi * 1.25 * cos(angle_psi/2))
+    text!(ax, p_psi_label, text = L"\alpha", fontsize = 20, font = :italic)
+        
+    # ---------------------------------------------------------
+    # 3. Precession Cone / Circle around Beff
+    # ---------------------------------------------------------
+      t_circle  = range(0, 2π, length=150)
+    
+    axis_cone   = normalize(p_Beff)
+    center_cone = dot(p_M, axis_cone) * axis_cone
+    
+    u_vector = p_M - center_cone
+    v_vector = cross(axis_cone, u_vector)
+    
+    pts_cone = [center_cone + cos(θ) * u_vector + sin(θ) * v_vector for θ in t_circle]
+    push!(pts_cone, pts_cone[1]) # Fermeture parfaite
+
+    lines!(ax, pts_cone, 
+           linestyle =:dot,
+       color = (:red, 0.8), 
+       linewidth = 2.0, 
+       overdraw = true)
+    
+    # ---------------------------------------------------------
+    # 4. Vectors (Arrows)
+    # ---------------------------------------------------------
+    # B_x(t) vector
+    arrows3d!(ax, [0], [0], [0], [p_Bx[1]], [p_Bx[2]], [p_Bx[3]], 
+              color = :blue, shaftradius = 0.012, tipradius = 0.035, tiplength = 0.08)
+    
+    
+    # B_eff(t) vector
+    arrows3d!(ax, [0], [0], [0], [p_Beff[1]], [p_Beff[2]], [p_Beff[3]], 
+              color = :black, shaftradius = 0.014, tipradius = 0.038, tiplength = 0.08)
+    
+    # Magnetization M vector
+    arrows3d!(ax, [0], [0], [0], [p_M[1]], [p_M[2]], [p_M[3]], 
+              color = :red, shaftradius = 0.012*2, tipradius = 0.035*2, tiplength = 0.08*2)
+    
+    # ---------------------------------------------------------
+    # 5. Mathematical Labels & LaTeX Text
+    # ---------------------------------------------------------
+ 
+    text!(ax, Point3f(0.8, 0, -0.3), 
+          text = L"\vec{B}_{\text{eff}}(t) = \vec{B}_1(t) = \vec{B}_x(t)", 
+          fontsize = 18, align = (:right, :center),color=:black)
+    
+    text!(ax, p_M, 
+          text = L"\vec{M}", 
+          fontsize = 18,
+          color=:red)
+    
+    return fig
+
+    end
+    fig_rf_standard()
+end
+
+# ╔═╡ 751c351c-be0b-4ee5-8c5c-a357b2ba7d0b
+md"""
+## Design consideration : SECH inversion pulse 
+
+One of the most prevalent adiabatic pulses used in MRI is a spatially
+selective adiabatic inversion pulse, also known as a hyperbolic secant.
+
+We will study it to understand the design consideration of an adiabatic pulse and the relation to the adiabatic condition.
+
+**SECH pulse : mathematical description**
+
+We will reimplement an example available in the [KomaMRI.jl documentation](https://juliahealth.org/KomaMRI.jl/dev/tutorial/gen-05-AdiabaticRFPulse)
+
+Description of the SECH RF pulse and the related parameters was done in the [following publication](https://onlinelibrary.wiley.com/doi/10.1002/jmri.26021) :
+> Wang, X., Greer, J.S., Dimitrov, I.E., Pezeshk, P., Chhabra, A. and Madhuranthakam, A.J. (2018), Frequency Offset Corrected Inversion Pulse for B0 and B1 Insensitive Fat Suppression at 3T: Application to MR Neurography of Brachial Plexus. J. Magn. Reson. Imaging, 48: 1104-1111. https://doi.org/10.1002/jmri.26021
+
+You can also find clear description in the Handbook of MRI pulse sequence, section 6.2.
+
+The SECH RF pulse is defined as : 
+
+$$
+\begin{split}
+A(t) &=A_0 \ \text{sech}(\beta t) \\
+\Phi (t) &= \mu \ln[\text{sech}(\beta t)] + \mu \ln(A_0)
+\end{split}
+$$
+
+where 
+
+$$\text{sech}(x) = \frac{2}{e^x + e^{-x}}$$
+
+If we want to define it as frequency modulation : 
+
+$$\Delta \omega(t) = \frac{d\phi}{dt} = -\mu \beta \ \tanh(\beta t)$$
+
+where 
+
+$$\tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}$$
+"""
+
+# ╔═╡ 1ece9d46-5c14-4898-86fe-6b8bf0ed5a5a
+md"""
+Plot the function tanh(x) and sech(x).
+""" |> tip
+
+# ╔═╡ b5880d21-7032-40cd-927b-155d76fe86f0
+begin 
+	function test()
+		t = -10:0.01:10
+
+		f = Figure()
+		ax = Axis(f[1,1])
+		lines!(ax,t,sech.(t),label="sech(t)")
+		lines!(ax,t,tanh.(t),label="tanh(t)")
+		axislegend(ax)
+		return f
+	end
+	println("Answer code")
+end
+
+# ╔═╡ 52650dfe-1da1-4cef-806d-c2a707870d0a
+md"""
+In order to fulfill the adiabatic condition : 
+
+$$\left|\frac{d\psi}{dt}\right| \ll \gamma \left| \vec{B}_{eff} \right|$$
+
+For this pulse, the hardest point to respect the adiabatic condition is at the center of the sweep, where $B_1$ is maximal and $|d \Delta \omega / dt| = \mu \beta^2$. Requiring the RF processing rate to dominate that sweep rate gives the threshold used in the paper:
+
+$$\frac{(\gamma_{\text{rad}}A_0)^2}{\mu\beta^2} \ge 1 \quad \Rightarrow \quad A_0 \ge \frac{\sqrt{\mu}\beta}{\gamma_{\text{rad}}}.$$
+
+which gives the following parameter choice : 
+
+$$A_0 \gg \frac{\sqrt{\mu} \beta}{\gamma}$$
+
+**Note:** in practive is $A_0$ is striclty superior, the performance of the adiabatic inversion pulse is acceptable.
+
+
+The **bandwidth** excited by this pulse correspond to the frequency sweep :
+
+$$\Delta \omega_{\text{sweep}} = \left| \Delta \omega(t=-\infty) - \Delta \omega(t= +\infty)\right|  = 2 * \mu \beta$$
+
+Corresponding to :
+
+$$\Delta f_{\text{sweep}} = \frac{\Delta \omega_{\text{sweep}}}{2 \pi} = \frac{\mu \beta}{\pi}$$
+
+This expression is valid for a sufficiently long RF duration when $\beta \ T_{RF} > 6$.
+"""
+
+# ╔═╡ df29d59e-da90-426b-ab59-426539257386
+begin
+	function RF_SECH()
+		b1max = 30.5e-6
+		Trf = 10e-3
+		β̂ = 4
+		μ = 4.9
+		β = 2 * β̂ / Trf;
+	
+		b1_threshold = β * sqrt(μ) / (2π * γ)
+		b1max > b1_threshold
+
+		t = range(-Trf / 2, Trf / 2, 201)
+		B1 = b1max .* sech.(β .* t)
+		Δf = -μ * β .* tanh.(β .* t) ./ (2π);
+		println("freq = $(μ * β/pi)")
+		#f = range(-2e3, 2e3, 161) |> collect
+		seq = Sequence()
+		@addblock seq += RF(B1, Trf, Δf, 0);
+
+		########### 
+		# plot parts
+		###########
+		f=Figure()
+		ax = Axis(f[1,1],title = "Frequency-modulated RF",xlabel = "t [ms]",ylabel = "B₁ [μT]", yticklabelcolor = :blue)#,yticks = 0:5:15)
+
+		lines!(ax,(t.-minimum(t))*1000,seq.RF[1].A*1e6,color=:blue)
+		
+		ax2 = Axis(f[1, 1], yticklabelcolor = :red, yaxisposition = :right,ylabel = "Δf [Hz]")#,yticks = -500:100:500)
+		hidespines!(ax2)
+		hidexdecorations!(ax2)
+		lines!(ax2,(t.-minimum(t))*1000,seq.RF[1].Δf,linestyle = :dot,color=:red)
+
+		#= ## phase
+		ax3 = Axis(f[1, 1])
+		phase_ = mod.(μ *log.(sech.(β*t))+μ*log.(B1),2*pi)
+		lines!(ax3,(t.-minimum(t))*1000,phase_,linestyle = :dot,color=:green)
+		=#
+
+		
+		return seq,f
+	end
+
+
+	seq_sech,f_sech = RF_SECH()
+	f_sech		
+end
+
+# ╔═╡ e3134c99-ec0e-45c0-9dd1-dae837eee8d9
+md"""
+KomaMRI.jl can be used to simulate the evolution of the magnetization along the time, we will use a specific callback function for that.
+"""
+
+# ╔═╡ 8381160d-c080-4b6e-b986-a524fe5fcc78
+begin
+trajectory = NamedTuple[]
+call_every_N_blocks = 1
+    
+record_traj = Callback(
+    call_every_N_blocks,
+    (progress_info, sim_blocks_info, device_data, sim_params) -> begin
+        j = last(sim_blocks_info.parts[progress_info.block])
+        push!(trajectory, (;
+            Mxy=device_data.Xt.xy[1], Mz=device_data.Xt.z[1],
+            ψ=device_data.seqd.ψ[j], B1=device_data.seqd.B1[j], Δf=device_data.seqd.Δf[j],
+        ))
+    end,
+)
+
+sys = Scanner(); #hide
+sim_params = KomaMRICore.default_sim_params()
+sim_params["gpu"] = false
+sim_params["return_type"] = "state"
+sim_params["max_rf_block_length"] = 1; # very inefficient; just for plots
+obj0 = Phantom(; x=[0.0], Δw=[0.0]);
+simulate(obj0, seq_sech, sys; sim_params, callbacks=(record_traj,), verbose=false);
+end
+
+# ╔═╡ 66fe617d-d530-47ef-be1b-e9657883597b
+md"""
+Let's see the effect of the SECH pulse along the time either in the laboratory/rotating frame or in the RF frame.
+"""
+
+# ╔═╡ 5bb6aa4c-07d7-4073-b7b4-49868171c81b
+@bind rf_frame PlutoUI.CheckBox()
+
+# ╔═╡ a3d82cac-111e-4fef-b6f8-491a3880f3b3
+md"""
+Rotating Frame : $rf_frame
+"""
+
+# ╔═╡ 60c35524-ca81-49ad-bde1-fa9d2848d7b9
+@bind t_M PlutoUI.Slider(1:length(trajectory),default = 200,show_value=true)
+
+# ╔═╡ 2814fa9c-80b5-4170-abf2-4f6d3f50148a
+begin
+
+    function adiabatic_frame(p) #hide
+        ωeff = (-real(p.B1), -imag(p.B1), p.Δf / γ) #hide
+        ωeff_norm = sqrt(sum(abs2, ωeff)) #hide
+        ω̂rf = iszero(ωeff_norm) ? zero.(ωeff) : ωeff ./ ωeff_norm #hide
+        Mxy_rf = p.Mxy * cis(-p.ψ) #hide
+        ω̂xy_rot = complex(ω̂rf[1], ω̂rf[2]) * cis(p.ψ) #hide
+        return (; #hide
+            Mrf=(real(Mxy_rf), imag(Mxy_rf), p.Mz), #hide
+            Mrot=(real(p.Mxy), imag(p.Mxy), p.Mz), #hide
+            ω̂rf, #hide
+            ω̂rot=(real(ω̂xy_rot), imag(ω̂xy_rot), ω̂rf[3]), #hide
+        ) #hide
+    end #hide
+    
+    function fig_M_adia(t_M)
+        f=Figure(backgroundcolor=:white)
+        ax = Axis3(f[1,1], title = "RF frame",aspect = :data)
+
+          # Orient camera perspective (x bottom-left, y bottom-right, z up)
+    ax.azimuth = -1.2π
+    ax.elevation = 0.1π
+
+        
+        # 1. Masquer les axes, la grille et le fond pour un style épuré
+        hidedecorations!(ax)
+        hidespines!(ax)
+
+        # 2. Dessiner la sphère translucide
+        # On crée une sphère unité centrée en (0,0,0)
+        sphere_geom = Sphere(Point3f(0), 1.0f0)
+        
+        mesh!(ax, sphere_geom, 
+            color = (:aliceblue, 0.1),   # Couleur légèrement bleutée avec transparence
+            transparency = true,         # Activation du mélange alpha
+            #shading = FastLighting       # Éclairage pour faire ressortir le relief 3D
+        )
+
+        if rf_frame
+            M = Mrf_xyz
+            ω = ω̂rf_xyz
+        else
+            M = Mrot_xyz
+            ω = ω̂rot_xyz
+        end
+            
+        lines!(ax,M[1][1:t_M],M[2][1:t_M],M[3][1:t_M],
+              color=:black,linewidth=3, label = L"M \ path")
+
+        arrows3d!(ax, [0],[0],[0],[M[1][t_M]],[M[2][t_M]],[M[3][t_M]],          
+                  color=:red,
+                  shaftradius = 0.012, 
+                  tipradius = 0.035, 
+                  tiplength = 0.08,
+                 label = L"M")
+
+      lines!(ax,ω[1][1:t_M],ω[2][1:t_M],ω[3][1:t_M],
+              color=:black,linewidth=3,linestyle=:dot, label = L"B_{eff} \ path")
+        
+       arrows3d!(ax, [0],[0],[0],[ω[1][t_M]],[ω[2][t_M]],[ω[3][t_M]],          
+              color=:green,
+              shaftradius = 0.012, 
+              tipradius = 0.035, 
+              tiplength = 0.08
+            ,label=L"B_{eff}")
+
+        scatter!(ax,0,0,0,color=:blue)
+
+        axislegend(ax)
+
+        return f 
+    end
+
+    trajectory_frames = adiabatic_frame.(trajectory) #hide
+    xyz(points) = ntuple(i -> getindex.(points, i), 3) #hide
+    Mrf_xyz = xyz(getproperty.(trajectory_frames, :Mrf)) #hide
+    Mrot_xyz = xyz(getproperty.(trajectory_frames, :Mrot)) #hide
+    ω̂rf_xyz = xyz(getproperty.(trajectory_frames, :ω̂rf)) #hide
+    ω̂rot_xyz = xyz(getproperty.(trajectory_frames, :ω̂rot)) #hide
+
+    fig_M_adia(t_M)
+end
+
+# ╔═╡ d39020ed-3ad2-4dba-9007-3cdf3ca86aee
+md"""
+You can observe that the Magnetization vector M (in red) is rotating around the $B_{eff}$ vector.
+
+## SECH pulse $B_0$ and $B_1$ robustness
+
+To showcase the off-resonance and  robustness of this type of pulse, we can show its effect in a heatmap with :
+-  $B_0 \in [-2,2] \ \text{kHz}$ corresponding to the application of a slice selective gradient for example
+-  $B_1 \in [0,16] \ \micro\text{T}$
+"""
+
+# ╔═╡ ef1712f7-90c0-45ea-8454-690c9ad8c456
+begin
+        function simu_sech()
+		b1max = 10.5e-6
+		Trf = 18.3e-3
+		β̂ = 4
+		μ = 6
+		β = 2 * β̂ / Trf;
+	
+		b1_threshold = β * sqrt(μ) / (2π * γ)
+
+		t = range(-Trf / 2, Trf / 2, 201)
+		B1 = b1max .* sech.(β .* t)
+		Δf = -μ * β .* tanh.(β .* t) ./ (2π);
+
+        f_b0 = range(-2e3, 2e3, 161) |> collect
+        obj = Phantom(; x=zeros(length(f_b0)), Δw=2π .* f_b0);
+        b1_scales = range(0.05, 1.2, 47) |> collect;
+        sim_params = Dict{String, Any}("return_type" => "state");
+        
+        Mz = map(b1_scales) do scale
+            seq_scale = Sequence()
+            @addblock seq_scale += RF(scale .* B1, Trf, Δf, 0)
+            @suppress simulate(obj, seq_scale, sys; sim_params, verbose=false).z
+        end
+			Mz_map = round.(reduce(hcat, Mz); digits=3) #hide
+
+			f=Figure()
+			ax = Axis(f[1,1],title = "SECH inversion profile :\nb1 = $b1max | β = $β | μ = $μ",
+					  xlabel = "Off-resonance [Hz]",
+					  ylabel = "B₁,max [μT]",
+					  xticks=([-2000,-1000,0,1000,2000,-μ*β/pi/2,+μ*β/pi/2], ["-2000","-1000","0","1000","2000",L"-\frac{1}{2}\frac{μβ}{pi}",L"+\frac{1}{2}\frac{μβ}{pi}"]))
+			
+			h = heatmap!(ax,f_b0,1e6 .* b1max .* b1_scales,(Mz_map),colormap=:RdBu)
+
+			Colorbar(f[1,2],h,label = "Mz")
+
+			hlines!(ax,1e6*b1_threshold,color=:black,linestyle=:dot,linewidth=3)
+			vlines!(ax,μ*β/pi/2,color=:black,linewidth=3,linestyle=:dot) 
+			vlines!(ax,-μ*β/pi/2,color=:black,linewidth=3,linestyle=:dot)
+			return f
+    end
+
+    simu_sech()
+end   
+
+# ╔═╡ 4d658a35-237f-4620-a93f-a65bf9bb88f0
+md"""
+The horizontal dotted line is the analytic adiabatic threshold for this HS pulse, where we can see that the inversion is achieved after the threshold is surpassed.
+
+The vertical ones represents the frequency bandwidth that can be used in conjonction with a slice selective gradient to inverse the magnetization in a slice.
+"""
+
+# ╔═╡ b3a636cb-4415-4895-8fe6-b9660861919f
+md"""
+## Conclusion about adiabatic RF
+
+**Pros :**
+- Adiabatic pulses are a special class of RF pulses that can work even in the presence of a spatially nonuniform B1 field.
+- Slice-selective implementation available : Some RF waveform are both insensitive to B1 and B0.
+
+
+**Cons :**
+- The waveforms of adiabatic excitation, refocusing, and inversion pulses generally differ from one another and may not be used interchangeably by simply stretching or scaling the pulse. For instance, halving the amplitude of an adiabatic 180° inversion pulse does not yield a 90° excitation pulse.
+- To satisfy the adiabatic condition, the adiabatic pulse amplitude is often considerably larger than that for nonadiabatic pulses. 
+- The pulse width can also be much longer, which increases the
+sensitivity to flow, off-resonance, and relaxation effects.
+
+
+**Applications :**
+- Quantitative MRI sequence using inversion RF pulse like the MP2RAGE sequence, in order to reduce the confounding factors from the $B_1$ inhomogeneities. 
+- Fat/fluid suppresion methods : STIR, FLAIR and SPAIR
+- Blood Flow quantification with ASL sequences
+
+
+
+"""
+
+# ╔═╡ abf7de8c-58ed-4258-9fad-365c2089f297
+md"""
+# Conclusion
+
+When working on MRI pulse programming, RF design is often introduced as a simple Fourier transform of the RF waveform. As discussed in this course, this approximation holds true only under specific conditions (e.g., small-tip-angle regimes), and it is crucial to understand where it fails.
+
+RF pulse design is a rich, ongoing field of research. Beyond basic pulses, you will encounter advanced techniques such as:
+
+- **Simultaneous Multi-Slice (SMS)**: Exciting multiple slices concurrently to accelerate acquisition.
+- **Spatial-Spectral Pulses**: Exciting both a specific spatial slice and a targeted chemical species in the frequency domain.
+- **Optimal Control Methods**: Designing pulses using numerical optimization approaches.
+- **Parallel Transmit (pTx) & $B_1$ Shimming**: Mitigating excitation inhomogeneities, especially at ultra-high fields.
+
+Designing tailored RF pulses becomes essential when operating at high static fields ($B_0$) to minimize the Specific Absorption Rate (SAR), as well as in non-ideal environments with significant $B_0$ and $B_1$ non-uniformities—such as low-field point-of-care (PoC) MRI systems.
+
+Although these advanced topics are beyond the scope of this introductory course, you are strongly encouraged to explore them using the following resources:
+
+- Handbook of MRI Pulses Sequences by Bernstein, King, Zhou. http://www.sciencedirect.com/science/book/9780120928613.
+- [Larson Lab Educational Resources](https://larsonlab.github.io/MRI-education-resources/)
+- [Stanford Course EE469B: RF Pulse Design for MRI](https://web.stanford.edu/class/ee469b)
+
 """
 
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
@@ -933,11 +1950,6 @@ md"""
 - What bandwidth should I use to excite a slice of 3 mm ?
 """ |> question
 
-# ╔═╡ 0ce785b8-5c88-4b85-9f82-4b811133bbb0
-md"""
-The K shape is the normalized integral of the pulse and in that case it is equal to 1
-""" |> hint
-
 # ╔═╡ 4ca863a0-e7d2-4254-8c95-e2ec976bc3db
 md"""
 $(frequency_grad(10e-3)[1])
@@ -990,8 +2002,12 @@ $$G = \frac{2\pi \ \text{BW}}{\gamma z} = \frac{2\pi \times \text{6173}}{\gamma 
 G = $(round(2pi * 6173 /(267.513e6 * 3e-3),digits=4)) T/m
 
 2. 
-
 The amplitude is really high and cannot be reached with standard gradient available on MR scanner.
+
+3. 
+	
+The only way to reduce the gradient amplitude is to decrease the bandwidth of the RF pulse which means make it shorter. 
+**Note** that the B1 peak will increase and we might reach the limit of our RF amplifier, as well as SAR limits
 """ |> answer_blurred
 
 # ╔═╡ 4315054c-11b2-45dd-9b0f-d03d000501fd
@@ -1033,6 +2049,13 @@ $(answer_slice())
 You can observe that increasing the TBW yields to a squarer slice profile with steeper edges (shorter transition zones) and reduced out-of-slice signal contamination.
 """ |> answer_folded
 
+# ╔═╡ d0b8b763-1766-4755-bac9-3cc7ec9b095b
+md"""
+The SINC function is one of the most common RF pulse in MRI experiments. However you can see that the profile gives poor results with a lot of ripple (inside and outside the main lobe).
+
+This is the reason why they are **apodized**, we will see this effect in the next section.
+""" |> note
+
 # ╔═╡ c09f5c2c-40c6-4ad4-b8fc-51916ed40de5
 md"""
 What happens to the slice profile as $T_\text{rf}$ increase ?
@@ -1040,7 +2063,7 @@ What happens to the slice profile as $T_\text{rf}$ increase ?
 
 # ╔═╡ e42cd377-804c-4ed5-9ee2-654bacc42aca
 md"""
-You can plot the right part function of the equation and check how the function evolves as the duration Trf increase then guess the effect of the convolution
+You can plot the right part function of the equation and check how the function evolves as the duration Trf increase then guess the effect of the convolution.
 """ |> hint
 
 # ╔═╡ b9bdf04a-09a8-4537-9a76-526dba0f7676
@@ -1052,6 +2075,105 @@ Thus, for $T\text{rf} = +\text{Inf}$, the function becames a dirac which means t
 	
 $$B_1(t) = B_\text{1,ideal}(t)$$
 """ |> answer_folded
+
+# ╔═╡ 3c6a4f35-794b-4c90-8428-4920a24969fc
+md"""
+- Adding the apodization function, mostly **suppress the sidelobes**. 
+	
+- However the pulse generates a **wider transition band**.
+""" |> note
+
+# ╔═╡ 6b93ca76-600e-4847-a14b-54b476a7ffb1
+md"""
+Play with the parameters of this function alpha and the level of band_ripple
+	
+- What happens when you increase the value of the band_ripple ? 
+- And if you use a small flip angle ?
+""" |> question
+
+# ╔═╡ 3c105f92-9912-41fd-9f8a-14f07a77aff9
+md"""
+The ripples increase in the passband / stopband and at some point the RF pulse failed.
+
+When the requested flip angle is small, the SINC pulse is really close to the SLR ones and give similar results.
+""" |> answer_blurred
+
+# ╔═╡ f363b27f-3d41-4584-b554-cea59c17f546
+md"""
+What magnetization profile should we optimize if we want to create an inversion pulse ?
+""" |> question
+
+# ╔═╡ 8690b206-8aa2-4bbd-ba9a-b52637d46373
+md"""
+For the excitation pulse, the profile was optimized to obtain a flat portion on $M_{xy}$.
+
+In we want to design an inversion pulse, we only care about the $M_z$ profile. The transverse $M_{xy}$ will be suppressed by large spoiling applied after the inversion pulse.
+""" |> answer_blurred
+
+# ╔═╡ af8a3526-3c3b-4628-b2ac-913fa9b45c20
+md"""
+For conventionnal RF pulses, $\omega (t) = \omega_0$ thus :
+
+$$\vec{B}_{\text{eff}}(t) = \vec{B}_1(t)$$
+
+because the adiabatic condition is not respected, the magnetization will rotate around the $B_1$ direction and the flip angle value will be defined as :
+
+$$\alpha = \gamma \int_{0}^{T} B_1(t) \, dt$$
+	
+""" |> note
+
+# ╔═╡ 46a587d4-b0ac-47e0-8014-e0c6540313a1
+md"""
+Knowing that the magnetisation $\vec{M}$ follow the effective $\vec{B_{eff}}$ when the adiabatic condition is respected :
+
+1. What is the direction of $\vec{B_{eff}}$ at the end of an excitation pulse ?
+
+2. What should be the value of the $\omega (t)$ at the end of the RF in order to respect that ?
+	
+""" |> question
+
+# ╔═╡ a433aa59-262b-49b2-b2a3-554808c63874
+md"""
+An excitation pulse convert the longitudinal magnetization in a transverse magnetization in the x/y plan. 
+	
+1. The $\vec{B_{eff}}$ should points to a direction orthogonal to $B_0$, in our example it points along the axis x.
+
+2.  In order to point on a direction orthogonal to $B_0$, $\omega_{RF}$ should be equal to $\omega_0$. In that case : 
+
+$$\vec{B}_z = \left[ B_0 - \frac{\omega_{rf}(t)}{\gamma} \right]\hat{z} = 0 \vec{z}$$
+""" |> answer_blurred
+
+# ╔═╡ 637ed81f-bbbf-48c3-a746-fdc1e681bd95
+md"""
+As the time variable t sweeps from $-\infty$ to $+\infty$, what happens to the amplitude and frequency of a SECH RF pulse ? 
+""" |> question
+
+# ╔═╡ 0e5978c4-9c52-4e1f-9faf-5dbbecc54876
+md"""
+When we plot the function we get the following figure $(test()).
+
+The amplitude starts and ends at 0 and is maximal when t=0 : $A(t=0) = A_0$.
+
+The frequency modulation function $\Delta \omega(t)$ goes from $-\mu \beta$ to $+\mu \beta$ and is equal to 0 at t=0 : $\Delta \omega(t=0) = 0$.
+""" |> answer_folded
+
+# ╔═╡ 56716177-862c-48ce-a622-5f88a67bbace
+md"""
+Is this waveform satisfy the requirement for an adiabatic inversion pulses ?
+""" |> question 
+
+# ╔═╡ 06e4a444-6f36-41a4-8eb5-a4f9335faef0
+md"""
+Yes, because the $B_{eff}$ will be aligned to $B_0$ at the beginning of the pulse :
+	
+$$\vec{B_{eff}} = \vec{B_x(t)} +  \vec{B_z(t)} =  \vec{0} + \left[ B_0 - \frac{\omega_{rf}(t=0)}{\gamma} \right]\hat{z} = \left[B_O + \mu \beta \right] \hat{z}$$
+
+and will also end on the -z axis :
+	
+$$\vec{B_{eff}} = \left[B_O - \mu \beta \right] \hat{z}$$
+
+if the parameters $A_0$, $\mu$ and $\beta$ are correctly designed.
+""" |> answer_blurred
 
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
 html"""
@@ -1074,12 +2196,10 @@ html"""
 </style>
 """
 
-# ╔═╡ 646c1dfc-4abb-4259-8c5f-8dbde63e9940
-
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
@@ -1094,15 +2214,16 @@ ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [compat]
+DSP = "~0.8.6"
 FFTW = "~1.10.0"
-GLMakie = "~0.13.12"
+GLMakie = "~0.13.13"
 HypertextLiteral = "~1.0.0"
-KomaMRI = "~0.11.0"
-Latexify = "~0.16.10"
+KomaMRI = "~0.13.1"
+Latexify = "~0.16.12"
 PlutoPlotly = "~0.6.6"
 PlutoTeachingTools = "~0.4.7"
 PlutoUI = "~0.7.83"
-ShortCodes = "~0.3.6"
+ShortCodes = "~0.4.3"
 Suppressor = "~0.2.8"
 """
 
@@ -1112,7 +2233,12 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "df0ff82e6d27b179fcdba50bf501a06541b0bc48"
+project_hash = "f7f1d4ca76064145fe1ed2fb2de83288efdd8d5a"
+
+[[deps.ANSIColoredPrinters]]
+git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
+uuid = "a4c015fc-c6ff-483c-b24f-f7ea428134e9"
+version = "0.0.1"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1220,9 +2346,9 @@ version = "1.1.2"
 
 [[deps.ArrayInterface]]
 deps = ["Adapt", "LinearAlgebra"]
-git-tree-sha1 = "75757da5d9f771ef5909fc84f81d2f9d24127315"
+git-tree-sha1 = "13f3b228c230ef0b4ecafd73c8ca9e99987ca692"
 uuid = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
-version = "7.27.0"
+version = "7.30.0"
 
     [deps.ArrayInterface.extensions]
     ArrayInterfaceAMDGPUExt = "AMDGPU"
@@ -1259,12 +2385,6 @@ version = "7.27.0"
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
-
-[[deps.AssetRegistry]]
-deps = ["JSON", "Pidfile", "SHA"]
-git-tree-sha1 = "902b85010203830d4bc02259f5450d2e16b316d8"
-uuid = "bf4720bc-e11a-5d0c-854e-bdca1663c893"
-version = "0.1.1"
 
 [[deps.Atomix]]
 deps = ["UnsafeAtomics"]
@@ -1349,22 +2469,24 @@ git-tree-sha1 = "4435559dc39793d53a9e3d278e185e920b4619ef"
 uuid = "0e736298-9ec6-45e8-9647-e4fc86a2fe38"
 version = "0.2.8"
 
-[[deps.BitFlags]]
-git-tree-sha1 = "bbe1079eecf9c9fbb52765193ad2bae27ae09bc8"
-uuid = "d1d4a3ce-64b1-5f1a-9ba4-7e7e69966f35"
-version = "0.1.10"
-
 [[deps.BitTwiddlingConvenienceFunctions]]
 deps = ["Static"]
 git-tree-sha1 = "f21cfd4950cb9f0587d5067e69405ad2acd27b87"
 uuid = "62783981-4cbd-42fc-bca8-16325de8dc4b"
 version = "0.1.6"
 
-[[deps.Blink]]
-deps = ["Base64", "Distributed", "HTTP", "JSExpr", "JSON", "Lazy", "Logging", "MacroTools", "Mustache", "Mux", "Pkg", "Reexport", "Sockets", "WebIO"]
-git-tree-sha1 = "bc93511973d1f949d45b0ea17878e6cb0ad484a1"
-uuid = "ad839575-38b3-5650-b840-f874b8c74a25"
-version = "0.12.9"
+[[deps.Bonito]]
+deps = ["ANSIColoredPrinters", "Base64", "CodecZlib", "Colors", "CommonMark", "Dates", "Deno_jll", "HTTP", "Hyperscript", "JSON", "LinearAlgebra", "Markdown", "MbedTLS", "MsgPack", "Observables", "OrderedCollections", "PrecompileTools", "Random", "RelocatableFolders", "SHA", "Scratch", "Sockets", "Tables", "ThreadPools", "URIs", "UUIDs", "WidgetsBase"]
+git-tree-sha1 = "f947a8b5967714bf5b7d82070b647631de1f10d9"
+uuid = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
+version = "5.2.0"
+
+    [deps.Bonito.extensions]
+    BonitoDocumenterExt = ["Documenter", "MarkdownAST"]
+
+    [deps.Bonito.weakdeps]
+    Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+    MarkdownAST = "d0879d2d-cac2-40c8-9cee-1863dc0c7391"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1399,12 +2521,6 @@ git-tree-sha1 = "e329286945d0cfc04456972ea732551869af1cfc"
 uuid = "4e9b3aee-d8a1-5a3d-ad8b-7d824db253f0"
 version = "1.0.1+0"
 
-[[deps.CSSUtil]]
-deps = ["Colors", "JSON", "Markdown", "Measures", "WebIO"]
-git-tree-sha1 = "b9fb4b464ec10e860abe251b91d4d049934f7399"
-uuid = "70588ee8-6100-5070-97c1-3cb50ed05fe8"
-version = "0.1.1"
-
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "Libdl", "Pixman_jll", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
 git-tree-sha1 = "1fa950ebc3e37eccd51c6a8fe1f92f7d86263522"
@@ -1428,9 +2544,9 @@ version = "3.2.0"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
-git-tree-sha1 = "962834c22b66e32aa10f7611c08c8ca4e20749a9"
+git-tree-sha1 = "970758a3d591a2a5c2a907c53f2e2f8c1b1d3537"
 uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
-version = "0.7.8"
+version = "0.7.9"
 
 [[deps.CodecZstd]]
 deps = ["TranscodingStreams", "Zstd_jll"]
@@ -1452,15 +2568,19 @@ version = "3.31.0"
 
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
-git-tree-sha1 = "b10d0b65641d57b8b4d5e234446582de5047050d"
+git-tree-sha1 = "67e11ee83a43eb71ddc950302c53bf33f0690dfe"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
-version = "0.11.5"
+version = "0.12.1"
+weakdeps = ["StyledStrings"]
+
+    [deps.ColorTypes.extensions]
+    StyledStringsExt = "StyledStrings"
 
 [[deps.ColorVectorSpace]]
 deps = ["ColorTypes", "FixedPointNumbers", "LinearAlgebra", "Requires", "Statistics", "TensorCore"]
-git-tree-sha1 = "a1f44953f2382ebb937d60dafbe2deea4bd23249"
+git-tree-sha1 = "8b3b6f87ce8f65a2b4f857528fd8d70086cd72b1"
 uuid = "c3611d14-8923-5661-9e6a-0046d554d3a4"
-version = "0.10.0"
+version = "0.11.0"
 weakdeps = ["SpecialFunctions"]
 
     [deps.ColorVectorSpace.extensions]
@@ -1468,19 +2588,33 @@ weakdeps = ["SpecialFunctions"]
 
 [[deps.Colors]]
 deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
-git-tree-sha1 = "362a287c3aa50601b0bc359053d5c2468f0e7ce0"
+git-tree-sha1 = "37ea44092930b1811e666c3bc38065d7d87fcc74"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
-version = "0.12.11"
+version = "0.13.1"
+
+[[deps.CommonMark]]
+deps = ["PrecompileTools"]
+git-tree-sha1 = "7c8fe02c7eb6fe22e89d3990123a2a931ca8fcfb"
+uuid = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
+version = "1.0.4"
+
+    [deps.CommonMark.extensions]
+    CommonMarkMarkdownASTExt = "MarkdownAST"
+    CommonMarkMarkdownExt = "Markdown"
+
+    [deps.CommonMark.weakdeps]
+    Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+    MarkdownAST = "d0879d2d-cac2-40c8-9cee-1863dc0c7391"
 
 [[deps.CommonSolve]]
-git-tree-sha1 = "99ee296f88c12485402e37c2fd025f95ae097637"
+git-tree-sha1 = "cf963add2340ad9960e5eb22844e61ad8f931fe1"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.9"
+version = "0.2.13"
 
 [[deps.CommonWorldInvalidations]]
-git-tree-sha1 = "f1697a56da59e8a2cefcbbfe71c13354a6f18c61"
+git-tree-sha1 = "ef2022bff55342a8c9846cdf218f62e475f0444d"
 uuid = "f70d9fcc-98c5-4d4a-abd7-e4cdeebd8ca8"
-version = "1.1.0"
+version = "1.1.2"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
@@ -1511,12 +2645,6 @@ deps = ["Observables", "Preferences"]
 git-tree-sha1 = "7bc84b769c1d384315e7b5c4ac03a6c303e6cf35"
 uuid = "95dc2771-c249-4cd0-9c9f-1f3b4330693c"
 version = "0.1.8"
-
-[[deps.ConcurrentUtilities]]
-deps = ["Serialization", "Sockets"]
-git-tree-sha1 = "21d088c496ea22914fe80906eb5bce65755e5ec8"
-uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
-version = "2.5.1"
 
 [[deps.ConstructionBase]]
 git-tree-sha1 = "b4b092499347b18a015186eae3042f72267106cb"
@@ -1554,9 +2682,9 @@ version = "0.3.1"
 
 [[deps.DSP]]
 deps = ["Bessels", "FFTW", "IterTools", "LinearAlgebra", "Polynomials", "Random", "Reexport", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "d335b2929e1b6067951a1250df247cc5fab7d40e"
+git-tree-sha1 = "a65cfc2999988f5ba09fc4bd8049e3ed914e5a04"
 uuid = "717857b8-e6f2-59f4-9121-6e50c889abd2"
-version = "0.8.5"
+version = "0.8.6"
 weakdeps = ["OffsetArrays"]
 
     [deps.DSP.extensions]
@@ -1569,9 +2697,9 @@ version = "1.16.0"
 
 [[deps.DataStructures]]
 deps = ["OrderedCollections"]
-git-tree-sha1 = "6fb53a69613a0b2b68a0d12671717d307ab8b24e"
+git-tree-sha1 = "b0bc6d2cad1fed8b7fd59a1551a991cb3d2809e6"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.19.5"
+version = "0.19.6"
 
 [[deps.DataValueInterfaces]]
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
@@ -1606,6 +2734,12 @@ git-tree-sha1 = "9e2f36d3c96a820c678f2f1f1782582fcf685bae"
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 version = "1.9.1"
 
+[[deps.Deno_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "cd6756e833c377e0ce9cd63fb97689a255f12323"
+uuid = "04572ae6-984a-583e-9378-9577a1c2574d"
+version = "1.33.4+0"
+
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
@@ -1613,9 +2747,9 @@ version = "1.11.0"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "Roots", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "cd3c5ac74cd3923c8945c6a81518c46abd0e73a3"
+git-tree-sha1 = "a958ab3a40c755563f5e1405c0846cb0446bf19d"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.129"
+version = "0.25.131"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -1645,6 +2779,12 @@ git-tree-sha1 = "e3290f2d49e661fbd94046d7e3726ffcb2d41053"
 uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
 version = "2.2.4+0"
 
+[[deps.Electron]]
+deps = ["Base64", "FilePaths", "JSON", "Pkg", "RelocatableFolders", "Sockets", "URIs", "UUIDs"]
+git-tree-sha1 = "a1fdd6f48f8519dcfe995ae93cd12f60cb2e1593"
+uuid = "a1bb12fb-d4d1-54b4-b10a-ee7951ef7ad3"
+version = "6.1.1"
+
 [[deps.EnumX]]
 git-tree-sha1 = "c49898e8438c828577f04b92fc9368c388ac783c"
 uuid = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
@@ -1662,22 +2802,16 @@ git-tree-sha1 = "83231673ea4d3d6008ac74dc5079e77ab2209d8f"
 uuid = "429591f6-91af-11e9-00e2-59fbe8cec110"
 version = "2.2.9"
 
-[[deps.ExceptionUnwrapping]]
-deps = ["Test"]
-git-tree-sha1 = "d36f682e590a83d63d1c7dbd287573764682d12a"
-uuid = "460bff9d-24e4-43bc-9d9f-a8973cb893f4"
-version = "0.1.11"
-
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "c307cd83373868391f3ac30b41530bc5d5d05d08"
+git-tree-sha1 = "f4d39eee89f1e58c26bf447f1d4156c0125d6838"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.8.1+0"
+version = "2.8.3+0"
 
 [[deps.ExprTools]]
-git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
+git-tree-sha1 = "d2e49e7efd29719d6f28b891b0e0e159daa9d2b4"
 uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
-version = "0.1.10"
+version = "0.1.11"
 
 [[deps.FFMPEG_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "PCRE2_jll", "Zlib_jll", "libaom_jll", "libass_jll", "libfdk_aac_jll", "libva_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
@@ -1710,9 +2844,9 @@ version = "0.3.2"
 
 [[deps.FileIO]]
 deps = ["Pkg", "Requires", "UUIDs"]
-git-tree-sha1 = "8e9c059d6857607253e837730dbf780b6b151acd"
+git-tree-sha1 = "6621fef488e496356c9c9625d0562c12a6070819"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-version = "1.19.0"
+version = "1.20.0"
 weakdeps = ["HTTP"]
 
     [deps.FileIO.extensions]
@@ -1751,9 +2885,9 @@ version = "1.11.0"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "2f979084d1e13948a3352cf64a25df6bd3b4dca3"
+git-tree-sha1 = "5bad39456d9f0166184fce2248783dd9862645c1"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
-version = "1.16.0"
+version = "1.17.0"
 weakdeps = ["PDMats", "SparseArrays", "StaticArrays", "Statistics"]
 
     [deps.FillArrays.extensions]
@@ -1803,17 +2937,11 @@ git-tree-sha1 = "7a214fdac5ed5f59a22c2d9a885a16da1c74bbc7"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
 version = "1.0.17+0"
 
-[[deps.FunctionalCollections]]
-deps = ["Test"]
-git-tree-sha1 = "04cb9cfaa6ba5311973994fe3496ddec19b6292a"
-uuid = "de31a74c-ac4f-5751-b3fd-e18cd04993ca"
-version = "0.5.0"
-
 [[deps.Functors]]
 deps = ["Compat", "ConstructionBase", "LinearAlgebra", "Random"]
-git-tree-sha1 = "60a0339f28a233601cb74468032b5c302d5067de"
+git-tree-sha1 = "1ac2813982db52b974c9343124ca61adbf297316"
 uuid = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
-version = "0.5.2"
+version = "0.5.3"
 
 [[deps.Future]]
 deps = ["Random"]
@@ -1834,15 +2962,21 @@ version = "3.4.1+1"
 
 [[deps.GLMakie]]
 deps = ["ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeTypeAbstraction", "GLFW", "GeometryBasics", "LinearAlgebra", "Makie", "Markdown", "MeshIO", "ModernGL", "Observables", "PrecompileTools", "Printf", "ShaderAbstractions", "StaticArrays"]
-git-tree-sha1 = "4ab403982698430670bd5302bfe0bd303f9518b8"
+git-tree-sha1 = "3e1770a9d85b8bd1767431b959d657dc8825d78d"
 uuid = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-version = "0.13.12"
+version = "0.13.13"
 
 [[deps.GPUArraysCore]]
 deps = ["Adapt"]
 git-tree-sha1 = "83cf05ab16a73219e5f6bd1bdfa9848fa24ac627"
 uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
 version = "0.2.0"
+
+[[deps.Gamma]]
+deps = ["LogExpFunctions"]
+git-tree-sha1 = "becc397f7cfb06e343496ae6ffb04818a851da51"
+uuid = "a0844989-3bd2-4988-8bea-c9407ab0941b"
+version = "1.2.0"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "LinearAlgebra", "PrecompileTools", "Random", "StaticArrays"]
@@ -1880,9 +3014,9 @@ version = "5.2.3+0"
 
 [[deps.Glib_jll]]
 deps = ["Artifacts", "GettextRuntime_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libiconv_jll", "Libmount_jll", "PCRE2_jll", "Zlib_jll"]
-git-tree-sha1 = "24f6def62397474a297bfcec22384101609142ed"
+git-tree-sha1 = "090526e65de8f69648ac156daae153de8b56df62"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
-version = "2.86.3+0"
+version = "2.88.3+0"
 
 [[deps.Graphite2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1915,10 +3049,10 @@ uuid = "0234f1f7-429e-5d53-9886-15a909be8d59"
 version = "2.1.2+0"
 
 [[deps.HTTP]]
-deps = ["Base64", "CodecZlib", "ConcurrentUtilities", "Dates", "ExceptionUnwrapping", "Logging", "LoggingExtras", "MbedTLS", "NetworkOptions", "OpenSSL", "PrecompileTools", "Random", "SimpleBufferStream", "Sockets", "URIs", "UUIDs"]
-git-tree-sha1 = "51059d23c8bb67911a2e6fd5130229113735fc7e"
+deps = ["Base64", "CodecZlib", "Dates", "EnumX", "PrecompileTools", "Random", "Reseau", "SHA", "URIs", "UUIDs", "Zlib_jll"]
+git-tree-sha1 = "d6e390d1515836237b837fb7b6fca7ba1d752db6"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "1.11.0"
+version = "2.6.5"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
@@ -1930,12 +3064,6 @@ version = "8.5.1+0"
 git-tree-sha1 = "2eaa69a7cab70a52b9687c8bf950a5a93ec895ae"
 uuid = "076d061b-32b6-4027-95e0-9a2c6f6d7e74"
 version = "0.2.0"
-
-[[deps.Hiccup]]
-deps = ["MacroTools", "Test"]
-git-tree-sha1 = "6187bb2d5fcbb2007c39e7ac53308b0d371124bd"
-uuid = "9fb69e20-1954-56bb-a84f-559cc56a8ff7"
-version = "0.2.2"
 
 [[deps.HostCPUFeatures]]
 deps = ["BitTwiddlingConvenienceFunctions", "IfElse", "Libdl", "Preferences", "Static"]
@@ -1950,10 +3078,10 @@ uuid = "e33a78d0-f292-5ffc-b300-72abe9b543c8"
 version = "2.14.0+0"
 
 [[deps.HypergeometricFunctions]]
-deps = ["LinearAlgebra", "OpenLibm_jll", "SpecialFunctions"]
-git-tree-sha1 = "68c173f4f449de5b438ee67ed0c9c748dc31a2ec"
+deps = ["Gamma", "LinearAlgebra"]
+git-tree-sha1 = "31bb6c92405c084617facc1d7ed9eb6c402d061e"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
-version = "0.3.28"
+version = "0.3.30"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -2030,27 +3158,15 @@ uuid = "22cec73e-a1b8-11e9-2c92-598750a2cf9c"
 version = "0.3.1"
 
 [[deps.IntegerMathUtils]]
-git-tree-sha1 = "4c1acff2dc6b6967e7e750633c50bc3b8d83e617"
+git-tree-sha1 = "c72458f1962faeb003bf23cbdb75164fe6280906"
 uuid = "18e54dd8-cb9d-406c-a71d-865a43cbb235"
-version = "0.1.3"
+version = "0.1.4"
 
 [[deps.IntelOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
 git-tree-sha1 = "ec1debd61c300961f98064cfb21287613ad7f303"
 uuid = "1d5cc7b8-4909-519e-a0f8-d0f5ad9712d0"
 version = "2025.2.0+0"
-
-[[deps.Interact]]
-deps = ["CSSUtil", "InteractBase", "JSON", "Knockout", "Observables", "OrderedCollections", "Reexport", "WebIO", "Widgets"]
-git-tree-sha1 = "c5091992248c7134af7c90554305c600d5d9012b"
-uuid = "c601a237-2ae4-5e1e-952c-7a85b0c7eef1"
-version = "0.10.5"
-
-[[deps.InteractBase]]
-deps = ["Base64", "CSSUtil", "Colors", "Dates", "JSExpr", "JSON", "Knockout", "Observables", "OrderedCollections", "Random", "WebIO", "Widgets"]
-git-tree-sha1 = "31b14c2523bfc02137995f93b829ebd5eb85c67c"
-uuid = "d3863d7c-f0c8-5437-a7b4-3ae773c01009"
-version = "0.10.11"
 
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
@@ -2073,9 +3189,9 @@ version = "0.16.3"
 
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm", "CoreMath", "MacroTools", "OpenBLASConsistentFPCSR_jll", "Printf", "Random", "RoundingEmulator"]
-git-tree-sha1 = "921d7e91687e15a2c7c269c226960491fc041832"
+git-tree-sha1 = "ff294afb9a15d31d8d7422da138844641a73135f"
 uuid = "d1acc4aa-44c8-5952-acd4-ba5d80a2a253"
-version = "1.0.9"
+version = "1.0.11"
 
     [deps.IntervalArithmetic.extensions]
     IntervalArithmeticArblibExt = "Arblib"
@@ -2151,28 +3267,16 @@ git-tree-sha1 = "7204148362dafe5fe6a273f855b8ccbe4df8173e"
 uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
 version = "1.8.0"
 
-[[deps.JSExpr]]
-deps = ["JSON", "MacroTools", "Observables", "WebIO"]
-git-tree-sha1 = "b413a73785b98474d8af24fd4c8a975e31df3658"
-uuid = "97c1335a-c9c5-57fe-bc5d-ec35cebe8660"
-version = "0.5.4"
-
 [[deps.JSON]]
-deps = ["Dates", "Mmap", "Parsers", "Unicode"]
-git-tree-sha1 = "31e996f0a15c7b280ba9f76636b3ff9e2ae58c9a"
+deps = ["Dates", "Logging", "Parsers", "PrecompileTools", "StructUtils", "UUIDs", "Unicode"]
+git-tree-sha1 = "c7345ab1a7ca4dc8a02c9f6510da0d9857bbe513"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-version = "0.21.4"
+version = "1.7.1"
 
-[[deps.JSON3]]
-deps = ["Dates", "Mmap", "Parsers", "PrecompileTools", "StructTypes", "UUIDs"]
-git-tree-sha1 = "411eccfe8aba0814ffa0fdf4860913ed09c34975"
-uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
-version = "1.14.3"
+    [deps.JSON.extensions]
+    JSONArrowExt = ["ArrowTypes"]
 
-    [deps.JSON3.extensions]
-    JSON3ArrowExt = ["ArrowTypes"]
-
-    [deps.JSON3.weakdeps]
+    [deps.JSON.weakdeps]
     ArrowTypes = "31f734f8-188a-4ce0-8406-c8a06bd891cd"
 
 [[deps.JpegTurbo]]
@@ -2183,9 +3287,9 @@ version = "0.1.6"
 
 [[deps.JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "c0c9b76f3520863909825cbecdef58cd63de705a"
+git-tree-sha1 = "037babc10853eeb8e585418922246cb97b8e5b74"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
-version = "3.1.5+0"
+version = "3.2.0+1"
 
 [[deps.JuliaSyntaxHighlighting]]
 deps = ["StyledStrings"]
@@ -2220,33 +3324,27 @@ git-tree-sha1 = "9eda8292dd3268b3b7ec9df21bbfac24e177ec52"
 uuid = "5ab0869b-81aa-558d-bb23-cbf5423bbe9b"
 version = "0.6.12"
 
-[[deps.Knockout]]
-deps = ["JSExpr", "JSON", "Observables", "Test", "WebIO"]
-git-tree-sha1 = "91835de56d816864f1c38fb5e3fad6eb1e741271"
-uuid = "bcebb21b-c2e3-54f8-a781-646b90f6d2cc"
-version = "0.2.6"
-
 [[deps.KomaMRI]]
-deps = ["AssetRegistry", "Blink", "FFTW", "Interact", "KomaMRICore", "KomaMRIFiles", "KomaMRIPlots", "MAT", "MRIReco", "PrecompileTools", "Preferences", "Reexport"]
-git-tree-sha1 = "1be4d6147cec7aaa8abe4a31a57336f9895ab306"
+deps = ["Artifacts", "Bonito", "Electron", "FFTW", "KomaMRICore", "KomaMRIFiles", "KomaMRIPlots", "MAT", "MRIReco", "MsgPack", "Observables", "PlotlyBase", "PrecompileTools", "Preferences", "Reexport"]
+git-tree-sha1 = "dba1b35f3b4750dfef1d5956c0323843fe72e1b2"
 uuid = "6a340f8b-2cdf-4c04-99be-4953d9b66d0a"
-version = "0.11.0"
+version = "0.13.1"
 
 [[deps.KomaMRIBase]]
-deps = ["FFTW", "Interpolations", "MAT", "MRIBase", "Parameters", "Reexport"]
-git-tree-sha1 = "8fe4e8cba223c663e56f7148995777582373e1bf"
+deps = ["DSP", "FFTW", "Interpolations", "LinearAlgebra", "MAT", "MRIBase", "Parameters", "PrecompileTools", "Reexport"]
+git-tree-sha1 = "f36de11b0c3cf14035cccd1bcd9dc403b9648a0b"
 uuid = "d0bc0b20-b151-4d03-b2a4-6ca51751cb9c"
-version = "0.12.0"
+version = "0.13.4"
 weakdeps = ["Unitful"]
 
     [deps.KomaMRIBase.extensions]
     KomaMRIBaseUnitfulExt = "Unitful"
 
 [[deps.KomaMRICore]]
-deps = ["AcceleratedKernels", "Adapt", "Functors", "KernelAbstractions", "KomaMRIBase", "ProgressMeter", "Reexport", "ThreadsX"]
-git-tree-sha1 = "c1e00c142db2f440c079d67a3376c21125133c6e"
+deps = ["AcceleratedKernels", "Adapt", "Functors", "KernelAbstractions", "KomaMRIBase", "PrecompileTools", "ProgressMeter", "Reexport", "ThreadsX"]
+git-tree-sha1 = "90e73cd8220c6b29fdde53c939d8707fc26dde7c"
 uuid = "4baa4f4d-2ae9-40db-8331-a7d1080e3f4e"
-version = "0.11.4"
+version = "0.12.5"
 
     [deps.KomaMRICore.extensions]
     KomaAMDGPUExt = "AMDGPU"
@@ -2261,20 +3359,16 @@ version = "0.11.4"
     oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.KomaMRIFiles]]
-deps = ["FileIO", "HDF5", "InteractiveUtils", "KomaMRIBase", "MAT", "MD5", "MRIFiles", "Printf", "Reexport", "SHA"]
-git-tree-sha1 = "f78027ef886e7a6f5693ee5a6414c22b73bbc3b5"
+deps = ["FileIO", "HDF5", "InteractiveUtils", "KomaMRIBase", "MAT", "MD5", "MRIFiles", "PrecompileTools", "Printf", "Reexport", "SHA"]
+git-tree-sha1 = "365f6fd35cb733286851102dce10e25f00fe8358"
 uuid = "fcf631a6-1c7e-4e88-9e64-b8888386d9dc"
-version = "0.11.0"
+version = "0.11.5"
 
 [[deps.KomaMRIPlots]]
-deps = ["Interpolations", "KomaMRIBase", "MAT", "PlotlyJS", "QMRIColors", "Reexport"]
-git-tree-sha1 = "88834a2b09f6338e7a37605bba7e98d94b6e1580"
+deps = ["Interpolations", "KomaMRIBase", "MAT", "PlotlyBase", "PlotlyKaleido", "QMRIColors"]
+git-tree-sha1 = "629c349a7d88978a381490caec2ce3129ff8d386"
 uuid = "76db0263-63f3-4d26-bb9a-5dba378db904"
-version = "0.11.1"
-weakdeps = ["PlutoPlotly"]
-
-    [deps.KomaMRIPlots.extensions]
-    KomaPlotsPlutoPlotlyExt = "PlutoPlotly"
+version = "0.13.0"
 
 [[deps.LAME_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2290,20 +3384,20 @@ version = "4.1.0+0"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "eb62a3deb62fc6d8822c0c4bef73e4412419c5d8"
+git-tree-sha1 = "b7970cef8ae1c990ba0c09cd8bdc1145e006632f"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
-version = "18.1.8+0"
+version = "22.1.7+0"
 
 [[deps.LaTeXStrings]]
-git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
+git-tree-sha1 = "f88f3ccef05a6a72a0cf0ed417c8fd68530f4ab2"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
-version = "1.4.0"
+version = "1.4.1"
 
 [[deps.Latexify]]
 deps = ["Format", "Ghostscript_jll", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "OrderedCollections", "Requires"]
-git-tree-sha1 = "44f93c47f9cd6c7e431f2f2091fcba8f01cd7e8f"
+git-tree-sha1 = "df7566479bd64f20bd16b09960145e70160ffb3b"
 uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
-version = "0.16.10"
+version = "0.16.12"
 
     [deps.Latexify.extensions]
     DataFramesExt = "DataFrames"
@@ -2322,12 +3416,6 @@ deps = ["ArrayInterface", "LinearAlgebra", "ManualMemory", "SIMDTypes", "Static"
 git-tree-sha1 = "a9eaadb366f5493a5654e843864c13d8b107548c"
 uuid = "10f19ff3-798f-405d-979b-55457f8fc047"
 version = "0.1.17"
-
-[[deps.Lazy]]
-deps = ["MacroTools"]
-git-tree-sha1 = "1370f8202dac30758f3c345f9909b97f53d87d3f"
-uuid = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
-version = "0.15.1"
 
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
@@ -2394,9 +3482,9 @@ version = "2.42.0+0"
 
 [[deps.Libtiff_jll]]
 deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "XZ_jll", "Zlib_jll", "Zstd_jll"]
-git-tree-sha1 = "f04133fe05eff1667d2054c53d59f9122383fe05"
+git-tree-sha1 = "aebd334d06cee9f24cea70bd19a39749daf73881"
 uuid = "89763e89-9b03-5906-acba-b20f662cd828"
-version = "4.7.2+0"
+version = "4.7.3+0"
 
 [[deps.Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2441,9 +3529,9 @@ version = "2.4.2"
 
 [[deps.LinearOperators]]
 deps = ["FastClosures", "LinearAlgebra", "Printf", "SparseArrays", "TimerOutputs"]
-git-tree-sha1 = "4170853dfdb5ac1374ffb5fcf79c24ba5f0bb8e3"
+git-tree-sha1 = "74f1bd5c1afef5a2d24a2b7917d3cb4b989a3ec6"
 uuid = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
-version = "2.14.1"
+version = "2.14.2"
 
     [deps.LinearOperators.extensions]
     LinearOperatorsAMDGPUExt = "AMDGPU"
@@ -2484,12 +3572,6 @@ version = "1.0.1"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
-
-[[deps.LoggingExtras]]
-deps = ["Dates", "Logging"]
-git-tree-sha1 = "f00544d95982ea270145636c181ceda21c4e2575"
-uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
-version = "1.2.0"
 
 [[deps.MAT]]
 deps = ["CodecZlib", "Dates", "HDF5", "OrderedCollections", "PooledArrays", "SparseArrays", "StringEncodings", "Tables"]
@@ -2582,9 +3664,9 @@ version = "0.5.16"
 
 [[deps.Makie]]
 deps = ["Animations", "Base64", "CRC32c", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "ComputePipeline", "Contour", "Dates", "DelaunayTriangulation", "Distributions", "DocStringExtensions", "Downloads", "FFMPEG_jll", "FileIO", "FilePaths", "FixedPointNumbers", "Format", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageBase", "ImageIO", "InteractiveUtils", "Interpolations", "IntervalSets", "InverseFunctions", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MacroTools", "Markdown", "MathTeXEngine", "Observables", "OffsetArrays", "PNGFiles", "Packing", "Pkg", "PlotUtils", "PolygonOps", "PrecompileTools", "Printf", "REPL", "Random", "RelocatableFolders", "Scratch", "ShaderAbstractions", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "TriplotBase", "UnicodeFun", "Unitful"]
-git-tree-sha1 = "efe001e1ee81b8eee0fe7da5a4328fcbbfd6b3aa"
+git-tree-sha1 = "f2c8715d05bf10f9d4dc354e69dee30b6be53239"
 uuid = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-version = "0.24.12"
+version = "0.24.13"
 
     [deps.Makie.extensions]
     MakieDynamicQuantitiesExt = "DynamicQuantities"
@@ -2624,11 +3706,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "ff69a2b1330bcb730b9ac1ab7dd680176f5896b8"
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 version = "2.28.1010+0"
-
-[[deps.Measures]]
-git-tree-sha1 = "b513cedd20d9c914783d8ad83d08120702bf2c77"
-uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
-version = "0.3.3"
 
 [[deps.Memoize]]
 deps = ["MacroTools"]
@@ -2680,23 +3757,17 @@ version = "0.3.4"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2025.11.4"
 
+[[deps.MsgPack]]
+deps = ["Serialization"]
+git-tree-sha1 = "f5db02ae992c260e4826fe78c942954b48e1d9c2"
+uuid = "99f44e22-a591-53d1-9472-aa23ef4bd671"
+version = "1.2.1"
+
 [[deps.MuladdMacro]]
 deps = ["PrecompileTools"]
-git-tree-sha1 = "e8dcbeef032ba2f9051a44ac22b4e54e3a1a0099"
+git-tree-sha1 = "283bf85d4a767481dd924dff0eee1735e95f449e"
 uuid = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
-version = "0.2.6"
-
-[[deps.Mustache]]
-deps = ["Printf", "Tables"]
-git-tree-sha1 = "3cbd5dda543bc59f2e482607ccf84b633724fc32"
-uuid = "ffc61752-8dc7-55ee-8c37-f3e9cdd09e70"
-version = "1.0.21"
-
-[[deps.Mux]]
-deps = ["AssetRegistry", "Base64", "HTTP", "Hiccup", "MbedTLS", "Pkg", "Sockets"]
-git-tree-sha1 = "7295d849103ac4fcbe3b2e439f229c5cc77b9b69"
-uuid = "a975b10e-0019-58db-a62f-e48ff68538c9"
-version = "1.0.2"
+version = "0.2.7"
 
 [[deps.NFFT]]
 deps = ["AbstractNFFTs", "BasicInterpolators", "Distributed", "FFTW", "LinearAlgebra", "OhMyThreads", "PrecompileTools", "Printf", "Random", "Reexport", "SparseArrays", "SpecialFunctions"]
@@ -2760,9 +3831,9 @@ weakdeps = ["Markdown", "ProgressMeter"]
 
 [[deps.OpenBLASConsistentFPCSR_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "3287ec88df50429a934ebc6cf14606215e27b987"
+git-tree-sha1 = "38a93f17e431141c6470bb67a88952a7c4f0e928"
 uuid = "6cdc7f73-28fd-5e50-80fb-958a8875b1af"
-version = "0.3.33+0"
+version = "0.3.34+0"
 
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
@@ -2777,9 +3848,9 @@ version = "0.3.3"
 
 [[deps.OpenEXR_jll]]
 deps = ["Artifacts", "Imath_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "0d621a4beb5e48d195f907c3c5b0bea285d9ff9d"
+git-tree-sha1 = "fd09db52a90efaae33a3d91f0bc71a22c429e8f1"
 uuid = "18a262bb-aa17-5467-a713-aee519bc75cb"
-version = "3.4.13+0"
+version = "3.4.14+0"
 
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -2791,12 +3862,6 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "Hwloc_jll", "JLLWrappers",
 git-tree-sha1 = "6d6c0ca4824268c1a7dca1f4721c535ac63d9074"
 uuid = "fe0851c0-eecd-5654-98d4-656369965a5c"
 version = "5.0.11+0"
-
-[[deps.OpenSSL]]
-deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "NetworkOptions", "OpenSSL_jll", "Sockets"]
-git-tree-sha1 = "1d1aaa7d449b58415f97d2839c318b70ffb525a0"
-uuid = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
-version = "1.6.1"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -2827,9 +3892,9 @@ version = "10.44.0+1"
 
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "26766d4b5f1a410c218a19b85a672c6edb693c65"
+git-tree-sha1 = "123266c25174ef6c8d4718920abc206452cf8de6"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
-version = "0.11.40"
+version = "0.11.41"
 weakdeps = ["StatsBase"]
 
     [deps.PDMats.extensions]
@@ -2855,9 +3920,9 @@ version = "0.5.12"
 
 [[deps.Pango_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "58e5ed5e386e156bd93e86b305ebd21ac63d2d04"
+git-tree-sha1 = "7126b66b721a605a2fec966a2874c5ed53258eb3"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
-version = "1.57.1+0"
+version = "1.58.0+0"
 
 [[deps.Parameters]]
 deps = ["OrderedCollections", "UnPack"]
@@ -2867,15 +3932,9 @@ version = "0.12.3"
 
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
-git-tree-sha1 = "32a4e09c5f29402573d673901778a0e03b0807b9"
+git-tree-sha1 = "3de8f5e6e90ebfa8d6d1f86997d6cdcd6a912ff3"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.8.6"
-
-[[deps.Pidfile]]
-deps = ["FileWatching", "Test"]
-git-tree-sha1 = "2d8aaf8ee10df53d0dfb9b8ee44ae7c04ced2b03"
-uuid = "fa939f87-e72e-5be4-a000-7fc836dbe307"
-version = "1.3.0"
+version = "2.8.7"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LLVMOpenMP_jll", "Libdl"]
@@ -2919,24 +3978,6 @@ version = "0.8.23"
     [deps.PlotlyBase.weakdeps]
     DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
     Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
-    IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
-    JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
-
-[[deps.PlotlyJS]]
-deps = ["Base64", "Blink", "DelimitedFiles", "JSExpr", "JSON", "Kaleido_jll", "Markdown", "Pkg", "PlotlyBase", "PlotlyKaleido", "REPL", "Reexport", "Requires", "WebIO"]
-git-tree-sha1 = "4bf6c08295346efba58bb2d5f8c52984efed7f27"
-uuid = "f0f68f2c-4968-5e81-91da-67840de0976a"
-version = "0.18.18"
-
-    [deps.PlotlyJS.extensions]
-    CSVExt = "CSV"
-    DataFramesExt = ["DataFrames", "CSV"]
-    IJuliaExt = "IJulia"
-    JSON3Ext = "JSON3"
-
-    [deps.PlotlyJS.weakdeps]
-    CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
-    DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
     IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
     JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 
@@ -3127,6 +4168,12 @@ git-tree-sha1 = "62389eeff14780bfe55195b7204c0d8738436d64"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.1"
 
+[[deps.Reseau]]
+deps = ["NetworkOptions", "OpenSSL_jll", "PrecompileTools", "Random", "SHA"]
+git-tree-sha1 = "ca7b7e19c33dd5dfae91369724d7edc198da29f5"
+uuid = "802f3686-a58f-41ce-bb0c-3c43c75bba36"
+version = "1.4.0"
+
 [[deps.Rmath]]
 deps = ["Random", "Rmath_jll"]
 git-tree-sha1 = "5b3d50eb374cea306873b371d3f8d3915a018f0b"
@@ -3135,15 +4182,15 @@ version = "0.9.0"
 
 [[deps.Rmath_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "58cdd8fb2201a6267e1db87ff148dd6c1dbd8ad8"
+git-tree-sha1 = "6d40b2fe70437b01397d2a4d5b020008da4e7019"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
-version = "0.5.1+0"
+version = "0.5.2+0"
 
 [[deps.Roots]]
 deps = ["Accessors", "CommonSolve", "Printf"]
-git-tree-sha1 = "91cfb1cb4f6e27557cc2df798a31eff6089a41eb"
+git-tree-sha1 = "7fb25a964849d90a0446366cdefca822e0e84900"
 uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "3.0.0"
+version = "3.0.6"
 
     [deps.Roots.extensions]
     RootsChainRulesCoreExt = "ChainRulesCore"
@@ -3182,9 +4229,9 @@ uuid = "94e857df-77ce-4151-89e5-788b33177be4"
 version = "0.1.0"
 
 [[deps.SciMLPublic]]
-git-tree-sha1 = "2b1b64add566435a768abdb3b053cac17d19ff3c"
+git-tree-sha1 = "cf9aaf8b9ed5db993259ea8b24cf2b7ba9bd3b79"
 uuid = "431bcebd-1456-4ced-9d72-93c2757fff0b"
-version = "1.2.1"
+version = "1.2.4"
 
 [[deps.ScopedValues]]
 deps = ["HashArrayMappedTries", "Logging"]
@@ -3225,21 +4272,22 @@ uuid = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 version = "2.0.0"
 
 [[deps.ShortCodes]]
-deps = ["Base64", "CodecZlib", "Downloads", "JSON3", "Memoize", "URIs", "UUIDs"]
-git-tree-sha1 = "5844ee60d9fd30a891d48bab77ac9e16791a0a57"
+deps = ["Base64", "CodecZlib", "Downloads", "JSON", "LinearAlgebra", "Memoize", "URIs", "UUIDs"]
+git-tree-sha1 = "dfd33ccf2c15de2d1a5c53b7ca45eb3a39241f8d"
 uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
-version = "0.3.6"
+version = "0.4.3"
+
+    [deps.ShortCodes.extensions]
+    QRCodersExt = "QRCoders"
+
+    [deps.ShortCodes.weakdeps]
+    QRCoders = "f42e9828-16f3-11ed-2883-9126170b272d"
 
 [[deps.SignedDistanceFields]]
 deps = ["Statistics"]
 git-tree-sha1 = "3949ad92e1c9d2ff0cd4a1317d5ecbba682f4b92"
 uuid = "73760f76-fbc4-59ce-8f25-708e95d2df96"
 version = "0.4.1"
-
-[[deps.SimpleBufferStream]]
-git-tree-sha1 = "f305871d2f381d21527c770d4788c06c097c9bc1"
-uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
-version = "1.2.0"
 
 [[deps.SimpleTraits]]
 deps = ["InteractiveUtils", "MacroTools"]
@@ -3270,9 +4318,9 @@ version = "1.12.0"
 
 [[deps.SpecialFunctions]]
 deps = ["IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "6547cbdd8ce32efba0d21c5a40fa96d1a3548f9f"
+git-tree-sha1 = "429071b23f4c9a13fb6582f807cc2ef454082408"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.8.0"
+version = "2.9.0"
 weakdeps = ["ChainRulesCore"]
 
     [deps.SpecialFunctions.extensions]
@@ -3303,9 +4351,9 @@ version = "0.1.2"
 
 [[deps.Static]]
 deps = ["CommonWorldInvalidations", "IfElse", "PrecompileTools", "SciMLPublic"]
-git-tree-sha1 = "b151f033556272891e184d7d36c62518b56bbaac"
+git-tree-sha1 = "474a5283ad435618090122872eea6a8165ea6bcf"
 uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "1.4.2"
+version = "1.4.6"
 
 [[deps.StaticArrayInterface]]
 deps = ["ArrayInterface", "Compat", "IfElse", "LinearAlgebra", "PrecompileTools", "SciMLPublic", "Static"]
@@ -3320,9 +4368,9 @@ weakdeps = ["OffsetArrays", "StaticArrays"]
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
-git-tree-sha1 = "246a8bb2e6667f832eea063c3a56aef96429a3db"
+git-tree-sha1 = "fac51faf3bb96e8bc0bf6f9f39ca4955652776bb"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.9.18"
+version = "1.9.19"
 weakdeps = ["ChainRulesCore", "Statistics"]
 
     [deps.StaticArrays.extensions]
@@ -3358,9 +4406,9 @@ version = "0.34.12"
 
 [[deps.StatsFuns]]
 deps = ["HypergeometricFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "770240df9a3b8888065046948f7a09b4e0f997d5"
+git-tree-sha1 = "91a5737baed20ee31f3faea0e51f57461f6a689e"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "2.2.0"
+version = "2.2.1"
 weakdeps = ["ChainRulesCore", "InverseFunctions"]
 
     [deps.StatsFuns.extensions]
@@ -3387,11 +4435,21 @@ weakdeps = ["Adapt", "GPUArraysCore", "KernelAbstractions", "LinearAlgebra", "Sp
     StructArraysSparseArraysExt = "SparseArrays"
     StructArraysStaticArraysExt = "StaticArrays"
 
-[[deps.StructTypes]]
+[[deps.StructUtils]]
 deps = ["Dates", "UUIDs"]
-git-tree-sha1 = "159331b30e94d7b11379037feeb9b690950cace8"
-uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
-version = "1.11.0"
+git-tree-sha1 = "2d0fc55c61321ba245c47be599570d11bac50303"
+uuid = "ec057cc2-7a8d-4b58-b3b3-92acb9f63b42"
+version = "2.8.5"
+
+    [deps.StructUtils.extensions]
+    StructUtilsMeasurementsExt = ["Measurements"]
+    StructUtilsStaticArraysCoreExt = ["StaticArraysCore"]
+    StructUtilsTablesExt = ["Tables"]
+
+    [deps.StructUtils.weakdeps]
+    Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
+    StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
+    Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [[deps.StyledStrings]]
 uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
@@ -3456,6 +4514,12 @@ deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
 
+[[deps.ThreadPools]]
+deps = ["Printf", "RecipesBase", "Statistics"]
+git-tree-sha1 = "50cb5f85d5646bc1422aa0238aa5bfca99ca9ae7"
+uuid = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
+version = "2.1.1"
+
 [[deps.ThreadsX]]
 deps = ["Accessors", "ArgCheck", "BangBang", "ConstructionBase", "InitialValues", "MicroCollections", "Referenceables", "SplittablesBase", "Transducers"]
 git-tree-sha1 = "70bd8244f4834d46c3d68bd09e7792d8f571ef04"
@@ -3518,9 +4582,9 @@ uuid = "981d1d27-644d-49a2-9326-4793e63143c3"
 version = "0.1.0"
 
 [[deps.URIs]]
-git-tree-sha1 = "bef26fb046d031353ef97a82e3fdb6afe7f21b1a"
+git-tree-sha1 = "908fec9df6c5de98548ead82a468c95ccf6cd263"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
-version = "1.6.1"
+version = "1.7.0"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -3566,9 +4630,9 @@ version = "1.28.0"
     Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[deps.UnsafeAtomics]]
-git-tree-sha1 = "0f30765c32d66d58e41f4cb5624d4fc8a82ec13b"
+git-tree-sha1 = "21b39bfb1fab6156b61fbcba4c86c57b6216d2c3"
 uuid = "013be700-e6cd-48c3-b4a1-df204f14c38f"
-version = "0.3.1"
+version = "0.3.2"
 
     [deps.UnsafeAtomics.extensions]
     UnsafeAtomicsLLVM = ["LLVM"]
@@ -3583,10 +4647,17 @@ uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 version = "0.21.74"
 
 [[deps.Wavelets]]
-deps = ["DSP", "FFTW", "LinearAlgebra", "Reexport", "SpecialFunctions", "Statistics"]
-git-tree-sha1 = "d0ec97a100abbe47a5e9a02361841da49cce6029"
+deps = ["DSP", "LinearAlgebra", "Reexport", "SpecialFunctions", "Statistics"]
+git-tree-sha1 = "e50c5e157177002ebe6bd921596db92ae9e0c73b"
 uuid = "29a6e085-ba6d-5f35-a997-948ac2efa89a"
-version = "0.10.1"
+version = "0.10.2"
+
+    [deps.Wavelets.extensions]
+    WaveletsGPUExt = ["GPUArrays", "KernelAbstractions"]
+
+    [deps.Wavelets.weakdeps]
+    GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+    KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 
 [[deps.Wayland_jll]]
 deps = ["Artifacts", "EpollShim_jll", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
@@ -3594,29 +4665,17 @@ git-tree-sha1 = "96478df35bbc2f3e1e791bc7a3d0eeee559e60e9"
 uuid = "a2964d1f-97da-50d4-b82a-358c7fce9d89"
 version = "1.24.0+0"
 
-[[deps.WebIO]]
-deps = ["AssetRegistry", "Base64", "Distributed", "FunctionalCollections", "JSON", "Logging", "Observables", "Pkg", "Random", "Requires", "Sockets", "UUIDs", "WebSockets", "Widgets"]
-git-tree-sha1 = "0eef0765186f7452e52236fa42ca8c9b3c11c6e3"
-uuid = "0f1e0344-ec1d-5b48-a673-e5cf874b6c29"
-version = "0.8.21"
-
 [[deps.WebP]]
 deps = ["CEnum", "ColorTypes", "FileIO", "FixedPointNumbers", "ImageCore", "libwebp_jll"]
 git-tree-sha1 = "aa1ca3c47f119fbdae8770c29820e5e6119b83f2"
 uuid = "e3aaa7dc-3e4b-44e0-be63-ffb868ccd7c1"
 version = "0.1.3"
 
-[[deps.WebSockets]]
-deps = ["Base64", "Dates", "HTTP", "Logging", "Sockets"]
-git-tree-sha1 = "4162e95e05e79922e44b9952ccbc262832e4ad07"
-uuid = "104b5d7c-a370-577a-8038-80a2059c5097"
-version = "1.6.0"
-
-[[deps.Widgets]]
-deps = ["Colors", "Dates", "Observables", "OrderedCollections"]
-git-tree-sha1 = "e9aeb174f95385de31e70bd15fa066a505ea82b9"
-uuid = "cc8bc4a8-27d6-5769-a93b-9d913e69aa62"
-version = "0.6.7"
+[[deps.WidgetsBase]]
+deps = ["Observables"]
+git-tree-sha1 = "30a1d631eb06e8c868c559599f915a62d55c2601"
+uuid = "eead4739-05f7-45a1-878c-cee36b57321c"
+version = "0.1.4"
 
 [[deps.WoodburyMatrices]]
 deps = ["LinearAlgebra", "SparseArrays"]
@@ -3674,9 +4733,9 @@ version = "6.0.2+0"
 
 [[deps.Xorg_libXi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll", "Xorg_libXfixes_jll"]
-git-tree-sha1 = "a376af5c7ae60d29825164db40787f15c80c7c54"
+git-tree-sha1 = "dcb316b3ce0941f195537dda56bea4517fcd3ff5"
 uuid = "a51aa0fd-4e3c-5386-b890-e753decda492"
-version = "1.8.3+0"
+version = "1.8.4+0"
 
 [[deps.Xorg_libXinerama_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll"]
@@ -3722,9 +4781,9 @@ version = "1.4.7+0"
 
 [[deps.Xorg_xkeyboard_config_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_xkbcomp_jll"]
-git-tree-sha1 = "ed349d26affcacafbc7fc2941ace1fb98f71e715"
+git-tree-sha1 = "2e59214e017a55cb87474a00fa76035c82ac0e17"
 uuid = "33bec58e-1273-512f-9401-5d533626f822"
-version = "2.47.0+1"
+version = "2.47.0+2"
 
 [[deps.Xorg_xtrans_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -3817,9 +4876,9 @@ version = "1.1.7+0"
 
 [[deps.libaom_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "850b06095ee71f0135d644ffd8a52850699581ed"
+git-tree-sha1 = "ef17c47d22224aaecc76e597ab21a072e025cf7b"
 uuid = "a4ae2306-e953-59d6-aa16-d00cac43593b"
-version = "3.13.3+0"
+version = "3.14.1+0"
 
 [[deps.libass_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
@@ -3840,9 +4899,9 @@ version = "0.2.2+0"
 
 [[deps.libdrm_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libpciaccess_jll"]
-git-tree-sha1 = "63aac0bcb0b582e11bad965cef4a689905456c03"
+git-tree-sha1 = "28e57478e8a160d346a19c28b3fffb9273bcc9c2"
 uuid = "8e53e030-5e6c-5a89-a30b-be5b7263a166"
-version = "2.4.125+1"
+version = "2.4.134+0"
 
 [[deps.libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -3929,8 +4988,7 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
-# ╠═36de82dc-02cb-494e-b83b-f6cbedf0711e
-# ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
+# ╟─c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╠═b50b352b-e1ef-45ae-992f-51adcc1f2da8
 # ╟─e4a2007c-dffa-4301-91db-f586d38991e5
 # ╟─c6823721-6968-4c61-8d1f-244df943a84d
@@ -3943,6 +5001,8 @@ version = "1.13.0+0"
 # ╟─058129a5-0b84-4176-93d9-08e79cde382e
 # ╟─e629f095-d005-4a1b-8b71-76e248d4d338
 # ╟─114295af-8f57-439d-94ba-bb8da6a1551f
+# ╟─98153325-6af6-4d18-a9c4-e2d68563f134
+# ╟─836e06b6-b0fe-4c75-9e80-c1eaa19c5f92
 # ╟─05a72b7b-8987-4d58-ad47-cfa220f3bc77
 # ╟─944d405b-782d-41f8-b405-ea4cb688c673
 # ╠═fda9c0cc-c622-4c49-aa35-04505ffd3ecc
@@ -3950,7 +5010,6 @@ version = "1.13.0+0"
 # ╟─38ba3290-6053-4901-9b60-c8dfed395da7
 # ╟─2c676476-e32f-40a6-83bc-f16cf8e158a9
 # ╟─bdebbcbe-ac00-4b27-9496-047478bd87ed
-# ╟─0ce785b8-5c88-4b85-9f82-4b811133bbb0
 # ╟─d78c9533-6915-491d-b55a-4e2b87be37f7
 # ╟─4ca863a0-e7d2-4254-8c95-e2ec976bc3db
 # ╟─13ed0746-d40a-44e6-a43b-8489bbdc21ad
@@ -3961,7 +5020,7 @@ version = "1.13.0+0"
 # ╟─0c2a6e9b-79e4-4f25-9917-edabbf811611
 # ╟─501e1529-ec9b-4d42-8cd6-c8a4a1f79674
 # ╟─2bfc3f08-5668-458c-9561-84427f34e509
-# ╟─51a21488-e2fd-4d60-8167-aa7e3784e023
+# ╠═51a21488-e2fd-4d60-8167-aa7e3784e023
 # ╟─b32ba2bc-42d1-4e1d-9c43-cdb387b43199
 # ╟─9d4529d5-9547-428a-ad3c-af3c7a65c859
 # ╟─54a9ab35-0a25-4bcd-9175-669319076c7c
@@ -3973,23 +5032,69 @@ version = "1.13.0+0"
 # ╟─f498d8d7-0793-4df5-91f1-3709c4b9b1ce
 # ╠═b116f4bc-f21b-4015-92a1-2e8007902116
 # ╟─bb028db2-0c59-4d1f-a819-9debe2a199d6
-# ╠═b63c272f-30c9-4963-a465-60062bc73005
-# ╠═8561d8d7-5ffc-4065-aaf8-353b83c27228
+# ╟─b63c272f-30c9-4963-a465-60062bc73005
+# ╟─8561d8d7-5ffc-4065-aaf8-353b83c27228
 # ╟─54ddbf15-98b1-49cd-99f2-04196bc76ff6
 # ╟─0e6e2c37-af8b-46d6-a069-b59ee7391449
 # ╟─83a5c738-b186-4ba9-ac94-d115d5f1de83
 # ╟─926d630b-45d3-4540-a431-01db6da2d595
+# ╟─d0b8b763-1766-4755-bac9-3cc7ec9b095b
 # ╟─bdb3a5c5-3357-46ae-a5d7-2f3ac836c2f7
 # ╟─c09f5c2c-40c6-4ad4-b8fc-51916ed40de5
 # ╟─e42cd377-804c-4ed5-9ee2-654bacc42aca
 # ╟─4acbbbf9-37d6-445d-af93-45003b4a1883
 # ╟─b9bdf04a-09a8-4537-9a76-526dba0f7676
 # ╟─fe69cf0d-db00-43be-82f8-b9bab2025b89
-# ╠═4cdf944e-9fa4-4151-a91b-033f2250fbf4
-# ╠═0ef6a166-43c9-4306-916a-8ad168ed0070
+# ╟─4cdf944e-9fa4-4151-a91b-033f2250fbf4
+# ╟─3c6a4f35-794b-4c90-8428-4920a24969fc
+# ╟─0e5c33dd-3da8-4fa5-b9c1-3beb466d2d64
+# ╟─4fd29083-f46b-4421-af76-e8bb973742de
+# ╟─1f794004-1796-4692-ada0-0096a693782a
+# ╟─66d7c892-8406-4c0e-8cde-90334d2b997a
+# ╟─89c422cd-4e3d-40b9-abc3-666cdde649ed
+# ╟─91fabae4-b0e5-4c93-800d-9050a93889e8
+# ╟─abfbc789-ca8d-4d94-ba3f-463e2d89a7b0
+# ╟─c9f11338-622c-466d-8da6-77482ebdcc1c
+# ╟─af940e86-96ba-4539-8f61-7d01b4ba9499
+# ╟─6b93ca76-600e-4847-a14b-54b476a7ffb1
+# ╟─3c105f92-9912-41fd-9f8a-14f07a77aff9
+# ╟─50f55add-c251-428e-aa5c-3f924a5a184e
+# ╟─f363b27f-3d41-4584-b554-cea59c17f546
+# ╟─8690b206-8aa2-4bbd-ba9a-b52637d46373
+# ╟─9d0bf0ec-ab59-411f-9462-728b796ebc79
+# ╠═7e685f0b-1524-44e3-bf76-9f0b5d12fe5f
+# ╟─2293d971-eca2-4b7f-a875-6d392ad4a31d
+# ╟─0ef6a166-43c9-4306-916a-8ad168ed0070
+# ╟─ddca51a1-279f-4955-a473-4169a9e85630
+# ╟─0d27fe66-4ad9-402e-b60a-26ea2a632d0a
+# ╟─d27f3b83-31be-4652-8645-0cc8783f224d
+# ╟─af8a3526-3c3b-4628-b2ac-913fa9b45c20
+# ╟─0d97ad7a-7b12-4bab-9130-7b2dc0d806a6
+# ╟─46a587d4-b0ac-47e0-8014-e0c6540313a1
+# ╟─a433aa59-262b-49b2-b2a3-554808c63874
+# ╟─751c351c-be0b-4ee5-8c5c-a357b2ba7d0b
+# ╟─637ed81f-bbbf-48c3-a746-fdc1e681bd95
+# ╟─1ece9d46-5c14-4898-86fe-6b8bf0ed5a5a
+# ╟─b5880d21-7032-40cd-927b-155d76fe86f0
+# ╟─0e5978c4-9c52-4e1f-9faf-5dbbecc54876
+# ╟─56716177-862c-48ce-a622-5f88a67bbace
+# ╟─06e4a444-6f36-41a4-8eb5-a4f9335faef0
+# ╟─52650dfe-1da1-4cef-806d-c2a707870d0a
+# ╠═df29d59e-da90-426b-ab59-426539257386
+# ╟─e3134c99-ec0e-45c0-9dd1-dae837eee8d9
+# ╠═8381160d-c080-4b6e-b986-a524fe5fcc78
+# ╟─66fe617d-d530-47ef-be1b-e9657883597b
+# ╟─5bb6aa4c-07d7-4073-b7b4-49868171c81b
+# ╟─a3d82cac-111e-4fef-b6f8-491a3880f3b3
+# ╟─60c35524-ca81-49ad-bde1-fa9d2848d7b9
+# ╟─2814fa9c-80b5-4170-abf2-4f6d3f50148a
+# ╟─d39020ed-3ad2-4dba-9007-3cdf3ca86aee
+# ╠═ef1712f7-90c0-45ea-8454-690c9ad8c456
+# ╟─4d658a35-237f-4620-a93f-a65bf9bb88f0
+# ╟─b3a636cb-4415-4895-8fe6-b9660861919f
+# ╟─abf7de8c-58ed-4258-9fad-365c2089f297
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
 # ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╠═71e31c86-ba5e-452b-8233-bc44861fdfa6
-# ╠═646c1dfc-4abb-4259-8c5f-8dbde63e9940
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
