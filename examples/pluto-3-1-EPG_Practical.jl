@@ -33,7 +33,7 @@ html"""
 	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 3: The Extended Phase Graph framework
+			Lesson 3 (no answer): The Extended Phase Graph framework
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
 			Nadège Corbin
@@ -42,12 +42,6 @@ html"""
 			CRMSB - Université de Bordeaux / CNRS
 		</p>
 	</div>
-"""
-
-# ╔═╡ 0b95dfa8-8528-4b18-864e-7b65058e05e0
-md"""
-Please download this file for the practical session at the IBIO platform: [Practical session](https://github.com/CRMSB/EDUC_BiDiM_IRM/blob/main/examples/pluto-3-1-EPG.jl)
-and run it as a Pluto notebook. 
 """
 
 # ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
@@ -68,6 +62,9 @@ A really good presentation of the EPG framework is available in **Lecture-04 fro
 
 # ╔═╡ c3d72b3f-1467-46fa-a964-387c625fcd2f
 YouTube("bskhnaoJVNY")
+
+# ╔═╡ c0f34433-f007-4a7f-b2e8-d33f14bd7a67
+
 
 # ╔═╡ 9eede586-5ede-431e-be8c-8dc1a4869b5c
 md"
@@ -123,12 +120,6 @@ Now let's imagine we have applied a gradient in this direction.
 Such that there is 2$\pi$ between the first and the last isochromat. 
 """
 
-# ╔═╡ 7d096023-f932-481a-a3b1-8c290a77dd0c
-begin 
-    Mxy_2(p)=exp(im*2*pi*p)
-    visuMxy(Mxy_2)
-end
-
 # ╔═╡ 090d5994-6e13-4178-b0ab-ef62e1e0258d
 md"""
 Those two previous configurations are the basis functions of $F_0$ and  $F_1$, some EPG states. Now when we will talk about $F_0$ and $F_1$, we will know that we will be talking about the population of isochromats following this organization without describing each isochromat independently.
@@ -159,9 +150,6 @@ begin
 	     ylims!(ax,(-1,1))
       f
   end
-
-
-    visuMxy2D(Mxy_2)
 
 end
 
@@ -196,17 +184,7 @@ begin
 	   zlims!(ax2,(-1,1))
       f
   end
-    
-    Mz_3(x)=1;
- 
-    visuMz(Mz_3)
          
-end
-
-# ╔═╡ 53b7ae7e-6e93-43a9-9826-9da197ee8ff3
-begin 
-    Mz_4(p)=cos(2*pi*p)
-    visuMz(Mz_4)
 end
 
 # ╔═╡ 209e3560-56d0-4f97-8d47-d2fb30c6a145
@@ -229,57 +207,6 @@ md"""
 md"""
 ## 1.3. Examples
 """
-
-# ╔═╡ bbd683cb-db0c-492c-abc6-bfe16a727d00
-begin
-    Mxy_grad_2(p)=exp(im*4*pi*p)
-    visuMxy(Mxy_grad_2)
-end
-
-# ╔═╡ e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
-begin
-    Mxy_6(p)=im*exp(im*4*pi*p)
-    visuMxy(Mxy_6)
-end
-
-# ╔═╡ 65a77af2-de1e-4514-8d74-197c58553be9
-begin
-    Mxy_7(p)=exp(-im*4*pi*p)
-    visuMxy(Mxy_7)
-end
-
-# ╔═╡ 2144b3dc-4f9d-4cea-b170-c12d069be630
-begin
-    Mxy_8(p)=cos(2*pi*p)
-    visuMxy(Mxy_8)
-end
-
-# ╔═╡ 402e1e83-6f39-4951-84e1-022395cf9abc
-begin
-    Mxy_9(p)=im*cos(2*pi*p)
-    visuMxy(Mxy_9)
-end
-
-# ╔═╡ ff888489-f7c5-4267-bdfa-0779b4c9bd47
-begin
-    Mz_10(p)=sin(2*pi*p)
-    visuMz(Mz_10)
-end
-
-# ╔═╡ 0fb76dd5-916c-451d-af0c-8de825615a9d
-begin
-    Mxy_11(p)=0.5*exp(2*pi*im*p)
-    visuMxy(Mxy_11)
-  
-end
-
-# ╔═╡ 782ecb14-1383-4051-a94a-11667afb98ea
-begin
-
-    Mz_11(p)=0.5
-    visuMz(Mz_11)
-    
-end
 
 # ╔═╡ 9ca8976b-6ed4-4670-ab53-a1c65f0a628a
 begin
@@ -307,10 +234,6 @@ begin
       f
   end
 
-    
-    
- 
-    visuClassic(Mxy_11,Mz_11)
          
 end
 
@@ -318,21 +241,6 @@ end
 md"""
 Note that several states with different _n_ can exist together! 
 """
-
-# ╔═╡ 9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
-begin
-
-    Mz_12(p)=sin(2*pi*p)
-    Mxy_12(p)=cos(2*pi*p)
-    visuClassic(Mxy_12,Mz_12)
-    
-end
-
-# ╔═╡ b8839df7-50e7-4f68-b159-f5d59da124bc
-visuMxy(Mxy_12)
-
-# ╔═╡ f8e8eb72-5587-4a4c-8d3d-9d405a495d08
-visuMz(Mz_12)
 
 # ╔═╡ 2e2a2750-fa16-437b-b313-6b20e966e814
 begin 
@@ -352,34 +260,6 @@ begin
 		Mz=p->real(Mz_final(p))
 		return Mxy,Mz
 	end
-end
-
-
-# ╔═╡ 218882cc-1ad4-4e50-9b01-5909435d56fc
-begin 
-	
-	Q=[0 0.8; 0 0.2;0 0]
-	Mxy_13, Mz_13=fromFtoM(Q)
-	visuMxy(Mxy_13)
-end
-
-# ╔═╡ 35da0ef0-74a3-423e-922d-e24abddea5bf
-begin 
-	visuMxy2D(Mxy_13)
-end
-
-# ╔═╡ a989690f-1da0-4330-9ec2-c93dc12e5fe0
-begin 
-	F1plus=[0 0.8;0 0;0 0]
-	Mxy_F1plus,Mz_F1plus=fromFtoM(F1plus)
-	visuMxy2D(Mxy_F1plus)
-end
-
-# ╔═╡ 4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
-begin
-	F1minus=[0 0;0 0.2;0 0]
-	Mxy_F1minus,Mz_F1minus=fromFtoM(F1minus)
-	visuMxy2D(Mxy_F1minus)
 end
 
 
@@ -473,26 +353,6 @@ Q
 
 """
 
-# ╔═╡ 0beeee18-bca7-4dc7-94b1-30058a36085b
-begin
-Q14a=[0.1 0 0.2*im;0.1 0.3 0; 0 0.5*im 0]
-
-Mxy_14a, Mz_14a=fromFtoM(Q14a)
-visuClassic(Mxy_14a,Mz_14a)
-
-end
-
-
-
-# ╔═╡ be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
-begin
-theta=2*pi*50*0.01
-Rx=[exp(im*theta) 0 0; 0 exp(-im*theta) 0; 0 0 1]
-	Q14b=Rx*Q14a;
-	Mxy_14b, Mz_14b=fromFtoM(Q14b)
-visuClassic(Mxy_14b,Mz_14b)
-end
-
 # ╔═╡ a8a706b8-5063-4997-b454-2cc915a1d3ed
 md"""
 
@@ -506,30 +366,6 @@ Note that applying a gradient does not affect Z states.
 If the gradient applied induces $p*2\pi$ dephasing, the magnetization moved from $F_n^+$  to $F_{n+p}^+$ and from $F_n^-$ to $F_{n-p}^-$. 
 """
 
-# ╔═╡ 0e0a39ed-d409-427f-b67a-4050d3a73810
-md"""
-Explanation: 
-
--  $0.5$ of$F_0^+$ moves in $F_1^+$ 
--  $0.25$ of $F_1^+$ moves in $F_2^+$
--  $0.1i$ of $F_1^-$ moves in $F_0^-$
-- Given that $F_0^+$=$(F_0^-)^*$, then $(0.1i)^*=-0.1i$ goes to $F_0^+$
-"""
-
-# ╔═╡ 41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
-begin
-Q_15a=[0.5 0.25 0;0.5 0.1*im 0; 0 0.2 0]
-	Mxy_15a, Mz_15a=fromFtoM(Q_15a)
-visuMxy2D(Mxy_15a)
-end
-
-# ╔═╡ 39933e22-95f5-4167-b8c6-9b1ee5a06d77
-begin
-Q_15b=[-0.1*im 0.5 0.25;0.1*im 0 0; 0 0.2 0]
-	Mxy_15b, Mz_15b=fromFtoM(Q_15b)
-visuMxy2D(Mxy_15b)
-end
-
 # ╔═╡ e3fa2fc9-443f-4590-bfc2-32c346c70b4d
 md"""
 
@@ -540,21 +376,6 @@ Relaxation  over the time T is both an attenuation of the states:
 And also a recovery of the state $Z_0$ which becomes $M_0(1-e^{-T/T_1})+Z_0exp(-T/T_1))$
 
 """
-
-# ╔═╡ 349e6d5c-664a-4905-94fe-51f1f4690298
-begin 
-Q_16=[-0.1*im 0.5 0.25; 0.1*im 0 0 ; 0 0.2*im 0]
-Mxy_16,Mz_16=fromFtoM(Q_16)
-visuClassic(Mxy_16,Mz_16)
-end	
-
-# ╔═╡ 88d5304a-5578-473a-aae9-bc1b733bc8f3
-begin 
-Q_16b=Q_16*[exp(-20/40) 0 0; 0 exp(-20/40) 0; 0 0 exp(-20/100)]
-Q_16[3,1]=Q_16[3,1]+(1-exp(-20/100))
-Mxy_16b,Mz_16b=fromFtoM(Q_16b)
-visuClassic(Mxy_16b,Mz_16b)
-end	
 
 # ╔═╡ cd4c5b9d-4e23-48d1-afa1-781d86563a1f
 md"""
@@ -602,71 +423,20 @@ begin
 end
 end
 
-# ╔═╡ 5e4d9226-cc07-4acc-80e2-765966ec0656
-begin 
-	Q_17b=[0;0;1]
-	R_17b=applyRF(pi/2,0)
-	Q_17b=R_17b*Q_17b
-	Mxy_17b,Mz_17b=fromFtoM(Q_17b)
-	visuClassic(Mxy_17b,Mz_17b)
-end
-
 # ╔═╡ 4b629172-2340-4dab-a73a-0aabbea61011
 md"""
 First let's draw the initial configuration.
 """
-
-# ╔═╡ 3bc9286d-84d7-48cd-83dd-63499cd362e8
-begin 
-	Q_18=[0 1;0 0;0 0]
-	Mxy_18,Mz_18=fromFtoM(Q_18)
-	visuClassic(Mxy_18,Mz_18)
-end
-
-# ╔═╡ 09a37845-57a0-4e05-a8f9-061cc77a5b44
-
-begin
-	R18=applyRF(60*pi/180,pi/2)
-	Q_18after=R18*Q_18;
-	Mxy_18after,Mz_18after=fromFtoM(Q_18after)
-	visuClassic(Mxy_18after,Mz_18after)
-end
-
 
 # ╔═╡ 34270e18-f966-49bb-9a0c-d39272ecbd43
 md"""
 A longitudinal component with the initial phase twist has been created, $Z_1$ is therefore populated. 
 """
 
-# ╔═╡ caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
-begin
-	visuMz(Mz_18after)
-end
-
 # ╔═╡ 1baac32b-9472-48e4-bcd9-19bf34735784
 md"""
 A transverse component remains which now has an elliptical distribution and the same phase twist,which corresponds to the sum of the population in state $F_1^+$ and $F_1^-$ (as explained before)
 """
-
-# ╔═╡ 74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
-begin
-	visuMxy2D(Mxy_18after)
-end
-
-# ╔═╡ 065491a5-e39b-431d-ad8e-42fcda40f34b
-begin
-Q_19=[0 im;0 0;0 0]
-Mxy_19,Mz_19=fromFtoM(Q_19)
-visuClassic(Mxy_19,Mz_19)
-end
-
-# ╔═╡ 0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
-begin
-R19=applyRF(pi,0)
-	Q_19after=R19*Q_19;
-Mxy_19after,Mz_19after=fromFtoM(Q_19after)
-visuClassic(Mxy_19after,Mz_19after)
-end
 
 # ╔═╡ 055cf6ac-2855-4f29-acbb-583d9a415d82
 md"""
@@ -691,43 +461,7 @@ Let's start with a multi echo spin-echo sequence
 (https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig1.png?raw=true)
 """
 
-# ╔═╡ b107650b-490a-47a6-8b0a-1d096ea910a7
-begin
-	#initialization
-	TE=20
-	T1=1000
-	T2=100
-	Q_20=[0 0 0;0 0 0;1 0 0]
-	#RF pulse
-	R20=applyRF(pi/2,0);
-	Q_20=R20*Q_20;
-	#Relaxation
-	Q_20=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q_20;
-	Q_20[3,1]=Q_20[3,1]+(1-exp(-(TE/2)/T1))
-	#Crusher
-	Q_20[1,:]=circshift(Q_20[1,:],1)
-	Q_20[2,:]=circshift(Q_20[2,:],-1)
-	Q_20[1,1]=conj(Q_20[2,1])
-	Q_20[2,end]=0;
-	# refocussing pulse 
-	R20refoc=applyRF(pi,0);
-	Q_20=R20refoc*Q_20;
-	# Crusher
-	Q_20[1,:]=circshift(Q_20[1,:],1)
-	Q_20[2,:]=circshift(Q_20[2,:],-1)
-	Q_20[1,1]=conj(Q_20[2,1])
-	Q_20[2,end]=0;
-	#Relaxation
-	Q_20=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q_20;
-	Q_20[3,1]=Q_20[3,1]+(1-exp(-(TE/2)/T1))
-	#Readout
-	print(round.(Q_20,digits=2))
-	Mxy_20,Mz_20=fromFtoM(Q_20)
-	visuClassic(Mxy_20,Mz_20)
-
-end
-
-# ╔═╡ ef758214-468f-4ba4-bb53-646f9eed6811
+# ╔═╡ bb5d8129-8f07-40a8-8527-26bb53ab7d3f
 begin
 	function MESE(alpha,phi,N,TE,T1,T2,dispfig)
 		
@@ -833,53 +567,7 @@ begin
 		return Q,S,Time,fig;
 	end
 
-	alpha=pi; N=6;
-	phi=0
-	a,b,c,fig=MESE(alpha,phi,N,TE,T1,T2,1)
-	fig
 
-end
-
-# ╔═╡ 06d3f755-6c85-425d-930f-16ec0a6334a5
-begin
-	
-	Q_20b,S_20b,Time_20b=MESE(alpha,phi,32,TE,T1,T2,0)
-	theory=exp.(-Time_20b/T2)
-	fig_20b=lines(Time_20b,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
-	scatter!(Time_20b,S_20b,marker='*',color=:coral,markersize=30,label="EPG")
-	axislegend()
-
-end
-
-# ╔═╡ 177660e1-4cb8-477b-acda-17ee3183925c
-begin 
-alpha_20c=170*pi/180;
-	aa,bb,cc,fig_20c_Q=MESE(alpha_20c,phi,N,TE,T1,T2,1)
-	fig_20c_Q
-end
-
-# ╔═╡ ec937014-e1eb-4908-ab42-04ed0cbb2a33
-begin
-	Q_20c,S_20c,Time_20c=MESE(alpha_20c,phi,32,TE,T1,T2,0)
-	fig_20c=lines(Time_20c,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
-	scatter!(Time_20c,S_20c,marker='*',color=:coral,markersize=30,label="EPG")
-	axislegend()
-end
-
-# ╔═╡ 5473b416-7492-48a4-bdbd-c863c9f67d12
-begin 
-alpha_20d=170*pi/180;
-phi_20d=pi/2
-aaa,bbb,ccc,fig_20d_Q=MESE(alpha_20d,phi_20d,N,TE,T1,T2,1)
-fig_20d_Q
-end
-
-# ╔═╡ 56bd4920-6be3-40c1-8256-ee2c2ab9da77
-begin
-	Q_20d,S_20d,Time_20d=MESE(alpha_20d,phi_20d,32,TE,T1,T2,0)
-	fig_20d=lines(Time_20d,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
-	scatter!(Time_20d,S_20d,marker='*',color=:coral,markersize=30,label="EPG")
-	axislegend()
 end
 
 # ╔═╡ 0a2d3298-6c32-4c3d-a141-bd8c7a38655c
@@ -927,78 +615,10 @@ Here is the pulse sequence diagram of the spoiled gradient echo.
 """
 
 
-# ╔═╡ 7695bd99-7dd4-4453-83b3-82883cedebe0
-begin 
- function spGRE(TE,TR,alpha,phi0,nTR,T1,T2,destroyMxy)
-	 Q=zeros(ComplexF64,3,nTR)
-  Q_temp=zeros(ComplexF64,3,nTR)
-	 S=zeros(ComplexF64,nTR)
-  R=zeros(ComplexF64,3,3)
-	 Q[3,1]=1;
-  for k in 0:nTR-1
-	
-		 phi=(phi0/2)*(k+1)*k;
-		 R=applyRF(alpha,phi)
-		 Q=R*Q;
-		 
-		 # Relaxation 
-		 Q=[exp(-TE/T2) 0 0; 0 exp(-TE/T2) 0; 0 0 exp(-TE/T1)]*Q;
-	   Q[3,1]=Q[3,1]+(1-exp(-TE/T1))
-
-		 Q_temp=Q;
-	
-		 S[k+1]=Q[1,1]*exp(-im*phi)
-	     
-		 # Crusher
-	 	Q[1,:]=circshift(Q[1,:],1)
- 	Q[2,:]=circshift(Q[2,:],-1)
- 	Q[1,1]=conj(Q[2,1])
- 	Q[2,end]=0;
-
-		 #Relaxation
-		 Q=[exp(-(TR-TE)/T2) 0 0; 0 exp(-(TR-TE)/T2) 0; 0 0 exp(-(TR-TE)/T1)]*Q;
-	   Q[3,1]=Q[3,1]+(1-exp(-(TR-TE)/T1))
-
-		 if destroyMxy==1
-		 Q[1:2,:]=zeros(2,nTR);
-		 end
-		
-	end 
-  return S
- end
-	
-	S0=spGRE(0,50,30*pi/180,0*pi/180,200,1000,1000,0)
-	S117=spGRE(0,50,30*pi/180,117*pi/180,200,1000,1000,0)
-	S120=spGRE(0,50,30*pi/180,120*pi/180,200,1000,1000,0)
-	Stheo=spGRE(0,50,30*pi/180,0*pi/180,200,1000,1000,1)
-	Sequation=sin(30*pi/180)*(1-exp(-50/1000))/(1-cos(30*pi/180)*exp(-50/1000))
-	fig_21=lines(abs.(S0),label="0°",axis=(xlabel="#TR",ylabel="Amplitude"))
-	lines!(abs.(S117),label="117°")
-	lines!(abs.(S120),label="120°")
-	lines!(abs.(Stheo),label="Destroyed transverse magnetization")
-	lines!(abs.(Sequation)*ones(size(Stheo)),linestyle=:dash,label="Theoretical equation")
-	axislegend()
-end
-
 # ╔═╡ c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
 md"""
  Here is the signal amplitude for each spoiling increment from 0 to 180°. 
 """
-
-# ╔═╡ aae4b539-45e9-4d78-86d5-9ff53770450a
-begin 
-Sig=zeros(ComplexF64,181)
-Ph=zeros(181)
-for k in 0:180
-
-	Stemp=spGRE(0,50,30*pi/180,k*pi/180,200,1000,1000,0)
-	Sig[k+1]=Stemp[end]
-	Ph[k+1]=k
-end
-fig_21b=lines(Ph,abs.(Sig),axis=(xlabel="#TR",ylabel="Amplitude"))
-lines!(abs.(Sequation)*ones(size(Stheo)),linestyle=:dash,label="Theoretical equation")
-fig_21b
-end
 
 # ╔═╡ 245aae0e-cba5-465f-a5b1-3443da3247f5
 md"""
@@ -1011,99 +631,12 @@ Instead of discarding the transverse magnetization, one can reuse it in order to
 - The readout gradient (and all the others) is completely balanced. 
 """
 
-# ╔═╡ 5da68585-bc48-4527-ac02-1787dd231adb
-begin
-
- function bSSFP(TR,alpha,phi0,nTR,T1,T2,df)
-	 Q=zeros(ComplexF64,3,nTR)
-	 S=zeros(ComplexF64,nTR)
-  R=zeros(ComplexF64,3,3)
-	 Q[3,1]=1;
-	 phi=0;
-  for k in 0:nTR-1
-	   phi=phi+phi0;
-		 R=applyRF(alpha,phi)
-		 Q=R*Q;
-	  
-		 # Precession
-	   theta=2*pi*df*TR/2*0.001;
-	   P=[exp(im*theta) 0 0; 0 exp(-im*theta) 0; 0 0 1]
-	   Q=P*Q;
-	  
-		 # Relaxation 
-		 Q=[exp(-TR/2/T2) 0 0; 0 exp(-TR/2/T2) 0; 0 0 exp(-TR/2/T1)]*Q;
-	   Q[3,1]=Q[3,1]+(1-exp(-TR/2/T1))
-	
-		 S[k+1]=Q[1,1]*exp(-im*phi)
-
-	  	#Precession 
-	   Q=P*Q;
-	  
-		 #Relaxation
-		 Q=[exp(-(TR/2)/T2) 0 0; 0 exp(-(TR/2)/T2) 0; 0 0 exp(-(TR/2)/T1)]*Q;
-	   Q[3,1]=Q[3,1]+(1-exp(-(TR/2)/T1))
-		
-	end 
-  return S	
- end
-S=bSSFP(10,30*pi/180,0,200,1000,100,0)
-fig_22a=lines(abs.(S),axis=(xlabel="#TR",ylabel="Amplitude"))
-nTR_22a=findfirst(abs.(diff(abs.(S))).<0.0001)
-print("Calculated")
-end
-
-
-# ╔═╡ d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
-begin
-
-	Sig_22b=zeros(ComplexF64,401)
-	for ind in 0:400
-		df=-200+ind
-		local S=bSSFP(10,30*pi/180,0,200,1000,100,df)
-		Sig_22b[ind+1]=S[end]
-	end
-	fig_22b=lines(-200:200,abs.(Sig_22b))
-	print("Computed")
-end
-
 # ╔═╡ 7afc5069-a10f-435a-8f1f-277821ff6b72
 md"""
 In the case of inhomogeneous B0, this translates into banding artefacts in the image. On-resonance regions will have almost no signal compared to the others. 
 ![FigBandingArtefact](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Bandingartefact.png?raw=true)
 _Figure from Miller,2012, Neuroimage DOI:10.1016/j.neuroimage.2011.10.040_
 """
-
-# ╔═╡ 6461f886-8fff-4e25-b44d-11f6259f7e69
-begin
-	fig_22c=Figure()
-	  ax=Axis(fig_22c[1,1],xlabel="df",ylabel="Amplitude")
-	for tr in 10:10:30
-	local Sig=zeros(ComplexF64,401)
-		for ind in 0:400
-			df=-200+ind
-			local S=bSSFP(tr,30*pi/180,0,200,1000,100,df)
-			Sig[ind+1]=S[end]
-		end
-	lines!(ax,-200:200,abs.(Sig),label="$tr ms")
-	end
-	axislegend()
-end
-
-# ╔═╡ 379d0bdd-f3bc-493d-b57a-b46f97b159f1
-begin
-	fig_22d=Figure()
-	  ax_22d=Axis(fig_22d[1,1],xlabel="df",ylabel="Amplitude")
-	for phi in 0:60:180
-	local Sig=zeros(ComplexF64,401)
-		for ind in 0:400
-			df=-200+ind
-			local S=bSSFP(10,30*pi/180,phi*pi/180,200,1000,100,df)
-			Sig[ind+1]=S[end]
-		end
-	lines!(ax_22d,-200:200,abs.(Sig),label="ϕ= $phi °")
-	end
-	axislegend()
-end
 
 # ╔═╡ 5eb70803-f9bd-4073-b990-0ea723d9cb45
 md"""
@@ -1202,7 +735,7 @@ Note that only $F_0$ will give signal as the other states will be completely dep
 
 # ╔═╡ be57d254-3fe7-44a5-85df-7483f8f4854b
 md"""
-This visualization is equivalent to a more classic 2D view where the position would be only represented by the color and not the  axis. 
+The following visualization is equivalent to a more classic 2D view where the position would be only represented by the color and not the  axis. Try to use this function to visualize the previous configuration!
 """|>note
 
 # ╔═╡ cd76a5df-6a9a-428e-af83-6d904c1b50b0
@@ -1281,26 +814,12 @@ Maybe try to vizualize it with _visuMxy_ ...
 And then look at the equations ...
 """|>hint
 
-# ╔═╡ 1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
-md"""
-	
-This configuration can be fully described by one coefficient : $$$F_2^+=1$$$
-	
-"""|>answer_folded
-
 # ╔═╡ 3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
 md"""
 	
 **Q6** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\exp(4\pi i p)$ ?
 	
 """|>question
-
-# ╔═╡ 44197ff8-f9ba-4b96-b80d-30cc3187a0c6
-md"""
-	
-This configuration can be fully described by one coefficient : $$$F_2^+=i$$$
-	
-"""|>answer_folded
 
 # ╔═╡ e29d1009-e681-4ac7-8795-dd87b3cd29e3
 md"""
@@ -1314,35 +833,16 @@ md"""
 	
 """|>question
 
-# ╔═╡ 4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
-md"""
-	
-This configuration can be fully described by one coefficient : $F_2^-=1$
-	
-"""|>answer_folded
-
 # ╔═╡ 84ce7725-9300-499c-bf2f-294587347720
 md"""
 	
 Note that $F^-_n$ and $F^+_n$ have the same number of "twists" but with opposite angle. 
 """|>important
 
-# ╔═╡ 72522850-f9d8-47bb-9f9f-05ff3e299e2f
-md"""
-	
-**Q8** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\cos(2\pi p)$ ?
-	
-"""|>question
-
 # ╔═╡ 8447240b-27a2-4df5-9366-2fad126a1651
 md"""
 $cos(x)=(e^{ix}+e^{-ix})/2$
 """|>hint
-
-# ╔═╡ c6842e09-7fba-45d0-b106-0864d0504c0e
-md"""
-This configuration can be fully described by two coefficients : $F_1^+=0.5$ and $F_1^-=0.5$
-"""|>answer_folded
 
 # ╔═╡ 0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
 md"""
@@ -1350,11 +850,6 @@ md"""
 **Q9** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\cos(2\pi p)$ ?
 	
 """|>question
-
-# ╔═╡ 4b77f7c2-ea87-4732-a967-58b2dabf6bfe
-md"""
-This configuration can be fully described by two coefficients : $F_1^+=i$ and $F_1^-=-i/2$
-"""|>answer_folded
 
 # ╔═╡ 2307f7ec-b5bb-4bf4-807d-458b04b87e29
 md"""
@@ -1368,20 +863,10 @@ md"""
 $e^x=\cos(x)+i\sin(x)$
 """|>hint
 
-# ╔═╡ 2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
-md"""
-This configuration can be fully described by one coefficient : $Z_1=-i/2$
-"""|>answer_folded
-
 # ╔═╡ 44151964-9080-4975-a05f-de08a201df72
 md"""
 **Q11a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=0.5 e^{2\pi i p}$ and the longitudinal magnetization $M_z(p) =0.5$ ?
 """|>question
-
-# ╔═╡ 0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
-md"""
-This configuration can be fully described by two coefficients : $Z_0=0.5$, $F^+_1=0.5$ 
-"""|>answer_folded
 
 # ╔═╡ 342d3039-4d5f-4493-af7b-fb83d31df08f
 md"""
@@ -1395,44 +880,15 @@ md"""
 **Q11c** What would be the Q matrix of this particular configuration ? 
 """|>question 
 
-# ╔═╡ 6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
-md"""
-$$\begin{equation}
-Q = \begin{bmatrix}
-0 & 0.5  \\
-0 & 0 \\
-0.5 & 0
-\end{bmatrix}
-\end{equation}$$
-
-"""|>answer_folded
-
 # ╔═╡ a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
 md"""
 **Q12a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=\cos(2\pi p)$ and the longitudinal magnetization $M_z(p) =\sin(2\pi p)$ ?
 """|>question
 
-# ╔═╡ 6e3f40c6-de85-4536-8f1d-c714b58f8cdd
-md"""
-This configuration can be fully described by three coefficients : $$$Z_1=i/2$$$, $$$F^+_1=0.5$$$ and $$$F^-_1=0.5$$$
-"""|>answer_folded
-
 # ╔═╡ a6e7c563-0b40-4d0f-9f87-361c169501ab
 md"""
 **Q12b** What is the Q matrix of this configuration ? 
 """|> question 
-
-# ╔═╡ cde32749-6600-4e36-bf16-21827e5fefb5
-md"""
-$$\begin{equation}
-Q = \begin{bmatrix}
-0 & 0.5  \\
-0 & 0.5 \\
-0 & i/2
-\end{bmatrix}
-\end{equation}$$
-
-"""|>answer_folded
 
 # ╔═╡ 816dfb87-d5c0-41e4-872e-e29319035047
 md"""
@@ -1501,15 +957,6 @@ Plot the isochromats before and after the application of the gradients with the 
 	
 """|>question
 
-# ╔═╡ 68921972-27a3-4e3b-a7fd-076d8eda1622
-md"""
-After applying the gradient, the configuration is $Q=\begin{bmatrix}
--0.1i & 0.5 & 0.25\\
-0.1i & 0 & 0  \\
-0 & 0.2i & 0
-\end{bmatrix}$ ?
-""" |>answer_folded
-
 # ╔═╡ 70f9159c-0aa8-41f4-bea6-959e697ea3d1
 md"""
 **Q16** If the relaxation times are $T_1=100ms$ and $T_2=40ms$ andthe configuration state is $Q=\begin{bmatrix}
@@ -1530,30 +977,11 @@ md"""
 Write a function that returns  the rotation matrix. 
 """|>tip
 
-# ╔═╡ 37425a77-b7dc-406a-a563-20dd63ac5256
-md"""
-The rotation matrix is $R=\begin{bmatrix} 
-0.5 & 0.5 & -i \\
-0.5 & 0.5 & i \\
--0.5i & 0.5i & 0
-\end{bmatrix}$
-
-"""|>answer_folded
-
 # ╔═╡ 9094e9ad-392c-454d-aa8c-25cd567d900e
 md"""
 **Q17b** what is the effect on this configuration matrix: 
 $Q=\begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$ ? What is the isochromat distribution? 
 """|>question
-
-# ╔═╡ 53f01777-e928-4227-a290-27fd5b6c42b8
-md"""
-$Q=\begin{bmatrix}
--i \\
-i\\
-0
-\end{bmatrix}$
-"""|>answer_folded
 
 # ╔═╡ ded0162b-4785-4b3f-8c2f-3b112bcf951d
 md"""
@@ -1572,14 +1000,6 @@ Without any calculation, what Q matrix is the result of the application of the 6
 **C**: $\begin{bmatrix} 0 & 0.75\\ 0 & -0.25 \\ 0 & -0.43 \end{bmatrix}$   
     
 """|>question
-
-# ╔═╡ 53eb7112-dcc0-4373-ad43-225e14b6b94b
-md"""
-The answer is **C**. 
-
-It can't be A or B because an RF pulse does not create new states. 
-
-"""|>answer_folded
 
 # ╔═╡ bccdb23f-057c-471b-8257-0851fdd9b853
 md"""
@@ -1635,22 +1055,10 @@ md"""
  In the function it might be interestsing to show the evolution of the Q matrix for each echo. 
 """|>tip
 
-# ╔═╡ cdb77e2f-985b-454f-acf2-b42e5510966d
-md"""
-The amplitude of the echoes follows the T2 exponential decay 
-$fig_20b
-"""|>answer_folded
-
 # ╔═╡ 530aae7d-c72f-4bc9-928a-ec75b3866d64
 md"""
 **Q20c** What happens if the refocussing pulse is imperfect and only reaches 170° ? 
 """|>question 
-
-# ╔═╡ fe896a03-f584-44bd-9109-edfa42e4bb28
-md"""
-With imperfect refocussing pulse the decay of the transverse component does not follow the exponential decay anymore. The resulting image willl be largely driveen by the B1 transmit field efficiency profile. This is also very problematic for quantitative MRI, when the objective is to estimate the T2 relaxation time. 
-$fig_20c
-"""|>answer_folded
 
 # ╔═╡ b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
 md"""
@@ -1662,12 +1070,6 @@ md"""
 1. Change the phase of the refocussing pulse 
 2. Look for the Carr‑Purcell‑Meiboom‑Gill condition 
 """|>hint
-
-# ╔═╡ f60f56fd-af2c-4254-858e-13323742f12e
-md"""
-Changing the refocussing pulse axis to y helps recovering a decay very close to the  $T_2$ exponential decay. 
-$fig_20d
-"""|>answer_folded
 
 # ╔═╡ 6ccbe255-748e-4e5a-bb3d-68500d1838be
 md"""
@@ -1684,16 +1086,6 @@ Which RF spoiling phase increment ($\phi_0$) yields a signal closest to the idea
 	
 **C**: $\phi_0=120°$
 """|>question
-
-# ╔═╡ e6801c1c-93b4-4a7c-93b3-230d57ada2da
-md"""
-The answer is B: $\phi_0=117°$
-$fig_21
-This graph shows multiple important points: 
-	- multiple RF pulses are required to reach a steady state, regardless of the RF spoiling increment
-	- the theoretical equation matches the steady state of the simulation where the transverse magnetization is forced to be 0 at the end of the TR
-	- the signal can be really different if the RF spoiling increment is modified
-"""|>answer_folded
 
 # ╔═╡ fef04dea-83d3-4c96-9331-68d3fde6cfc0
 md"""
@@ -1712,39 +1104,15 @@ md"""
 For this exercise, we consider the steady-state being reached when the difference between two consecutives TRs is less than 0.0001 (assuming $M_0=1$)
 """|>tip
 
-# ╔═╡ fc389b75-5bae-4abf-ba58-b833d2d7ae08
-md"""
-	
-The number of TR required to reach the steady state is $nTR_22a
-$fig_22a
-	
-"""|>answer_folded
-
 # ╔═╡ 10498091-e583-442e-9ec4-b565a6cf61ce
 md"""
 **Q22b** How would the signal vary in the case of off-resonance frequency (from -200Hz to 200Hz)? 
 """|>question 
 
-# ╔═╡ bb5bd06f-0b05-479a-8ce4-43d196876f62
-md"""
-	
- The signal increases when changing off-resonance frequency. However it decreases again to its minimum at 100Hz and -100Hz. 
- $fig_22b
-	
-"""|>answer_folded
-
 # ╔═╡ 4c29f5d6-db13-4111-ba6e-774a661b8692
 md"""
 **Q22c** Changing the TR or the phase of the RF pulse will have an impact. WIll that be a change of the distance between two dark band or a shift of all the the bands ? 
 """|>question
-
-# ╔═╡ 4a4535d4-18cf-4132-929a-5f2deb6622b5
-md"""
-Increasing the TR reduces the distance between two bands. This distance is equal to 1/TR.
-
-$fig_22c
-
-"""|>answer_folded
 
 # ╔═╡ 680ec799-71a7-4cd7-b8a2-f213a7a747b8
 md"""
@@ -1752,13 +1120,6 @@ md"""
 
 """|>question
 
-# ╔═╡ 9789f2b0-64bb-4852-8a42-0644be047d76
-md"""
-
-All bands can be shifted by linearly increasing the phase of the RF pulse from TR to TR. 
-$fig_22d
-
-"""|>answer_folded
 
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
 html"""
@@ -3611,11 +2972,11 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
-# ╟─0b95dfa8-8528-4b18-864e-7b65058e05e0
 # ╟─c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
 # ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
 # ╟─c3d72b3f-1467-46fa-a964-387c625fcd2f
+# ╟─c0f34433-f007-4a7f-b2e8-d33f14bd7a67
 # ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
 # ╟─066f2d77-4a57-4396-a86a-9b5eed5e7896
 # ╟─0c73051a-f356-4094-9250-2cb1cc72201d
@@ -3623,7 +2984,6 @@ version = "1.13.0+0"
 # ╟─4cecb481-e70f-4ed6-8a16-90ba400eed97
 # ╟─53bc8b12-8aa9-47f8-8749-0c7aebca433a
 # ╟─43302385-ba8a-4e7b-9cff-2c5bf977d5b8
-# ╟─7d096023-f932-481a-a3b1-8c290a77dd0c
 # ╟─090d5994-6e13-4178-b0ab-ef62e1e0258d
 # ╟─1eb4b0bd-857a-4a94-ac67-67c598b721fa
 # ╟─be57d254-3fe7-44a5-85df-7483f8f4854b
@@ -3633,7 +2993,6 @@ version = "1.13.0+0"
 # ╟─1cfb4b83-7b50-449e-94d4-52e751ae4180
 # ╟─3c9b9f6f-f117-4513-8a82-8bafcaacee64
 # ╟─fdee56d8-22d4-40d1-b59d-3ea436effb7a
-# ╟─53b7ae7e-6e93-43a9-9826-9da197ee8ff3
 # ╟─209e3560-56d0-4f97-8d47-d2fb30c6a145
 # ╟─8a41e907-2d6e-4fba-b750-bde13f044ed7
 # ╟─54b0044e-b662-4034-a844-6421b0a0af56
@@ -3641,137 +3000,73 @@ version = "1.13.0+0"
 # ╟─07bfc15b-24c8-44e4-932f-6e19d8eab264
 # ╟─5ceb34a1-b95c-4bf8-aba2-71123881ee9b
 # ╟─7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
-# ╟─bbd683cb-db0c-492c-abc6-bfe16a727d00
-# ╠═1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
 # ╟─3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
-# ╟─e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
-# ╟─44197ff8-f9ba-4b96-b80d-30cc3187a0c6
 # ╟─e29d1009-e681-4ac7-8795-dd87b3cd29e3
 # ╟─44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
-# ╟─65a77af2-de1e-4514-8d74-197c58553be9
-# ╟─4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
 # ╟─84ce7725-9300-499c-bf2f-294587347720
-# ╟─72522850-f9d8-47bb-9f9f-05ff3e299e2f
-# ╟─2144b3dc-4f9d-4cea-b170-c12d069be630
 # ╟─8447240b-27a2-4df5-9366-2fad126a1651
-# ╟─c6842e09-7fba-45d0-b106-0864d0504c0e
 # ╟─0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
-# ╟─402e1e83-6f39-4951-84e1-022395cf9abc
-# ╟─4b77f7c2-ea87-4732-a967-58b2dabf6bfe
 # ╟─2307f7ec-b5bb-4bf4-807d-458b04b87e29
-# ╟─ff888489-f7c5-4267-bdfa-0779b4c9bd47
 # ╟─d7260975-4ba0-414e-8493-ecb35d674f9e
-# ╟─2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
 # ╟─44151964-9080-4975-a05f-de08a201df72
-# ╟─0fb76dd5-916c-451d-af0c-8de825615a9d
-# ╟─782ecb14-1383-4051-a94a-11667afb98ea
-# ╟─0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
 # ╟─342d3039-4d5f-4493-af7b-fb83d31df08f
 # ╟─9ca8976b-6ed4-4670-ab53-a1c65f0a628a
 # ╟─b7d18ce7-56ee-4924-8142-83e0cbfae698
 # ╟─20ad0308-6775-4650-93ce-8fe5f66dc746
-# ╟─6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
 # ╟─a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
-# ╟─9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
-# ╠═b8839df7-50e7-4f68-b159-f5d59da124bc
-# ╟─f8e8eb72-5587-4a4c-8d3d-9d405a495d08
-# ╟─6e3f40c6-de85-4536-8f1d-c714b58f8cdd
 # ╟─a6e7c563-0b40-4d0f-9f87-361c169501ab
-# ╟─cde32749-6600-4e36-bf16-21827e5fefb5
 # ╟─816dfb87-d5c0-41e4-872e-e29319035047
 # ╟─71855601-5211-494a-a916-df606c4928c9
 # ╟─2e2a2750-fa16-437b-b313-6b20e966e814
-# ╟─218882cc-1ad4-4e50-9b01-5909435d56fc
-# ╟─35da0ef0-74a3-423e-922d-e24abddea5bf
 # ╟─e9adf55b-0851-4c1b-a468-c1e42d0389b8
-# ╟─a989690f-1da0-4330-9ec2-c93dc12e5fe0
-# ╟─4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
 # ╟─34f5d1f9-3add-44d8-ad05-4acb08921d82
 # ╟─07344fa6-7082-4cf9-a0ac-1c6230d967c2
 # ╟─8add0d61-2a42-49e4-927a-c0b1132503f5
 # ╟─a437b267-089e-48bf-85cf-a0288a99a294
 # ╟─63cb3219-59e0-4413-bb0a-ab65a0217a84
 # ╟─e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
-# ╟─0beeee18-bca7-4dc7-94b1-30058a36085b
-# ╟─be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
 # ╟─a8a706b8-5063-4997-b454-2cc915a1d3ed
 # ╟─0c9e9709-0f08-42cf-8ebe-34fb924364a9
-# ╟─68921972-27a3-4e3b-a7fd-076d8eda1622
-# ╟─0e0a39ed-d409-427f-b67a-4050d3a73810
-# ╟─41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
-# ╟─39933e22-95f5-4167-b8c6-9b1ee5a06d77
 # ╟─e3fa2fc9-443f-4590-bfc2-32c346c70b4d
-# ╟─70f9159c-0aa8-41f4-bea6-959e697ea3d1
-# ╟─349e6d5c-664a-4905-94fe-51f1f4690298
-# ╟─88d5304a-5578-473a-aae9-bc1b733bc8f3
+# ╠═70f9159c-0aa8-41f4-bea6-959e697ea3d1
 # ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
 # ╟─0415830d-0026-4392-8b0d-f699fe445cea
 # ╟─3698965a-6f37-4639-823f-cdc679d9dffb
 # ╟─0bbfc3dc-0e4b-498f-a966-50d46d31956f
-# ╟─37425a77-b7dc-406a-a563-20dd63ac5256
 # ╟─9094e9ad-392c-454d-aa8c-25cd567d900e
-# ╟─53f01777-e928-4227-a290-27fd5b6c42b8
-# ╟─5e4d9226-cc07-4acc-80e2-765966ec0656
 # ╟─ded0162b-4785-4b3f-8c2f-3b112bcf951d
-# ╟─53eb7112-dcc0-4373-ad43-225e14b6b94b
 # ╟─bccdb23f-057c-471b-8257-0851fdd9b853
 # ╟─4b629172-2340-4dab-a73a-0aabbea61011
-# ╟─3bc9286d-84d7-48cd-83dd-63499cd362e8
-# ╟─09a37845-57a0-4e05-a8f9-061cc77a5b44
 # ╟─34270e18-f966-49bb-9a0c-d39272ecbd43
-# ╟─caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
 # ╟─1baac32b-9472-48e4-bcd9-19bf34735784
-# ╟─74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
-# ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
-# ╟─065491a5-e39b-431d-ad8e-42fcda40f34b
-# ╟─0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+# ╠═b18a5a3c-49b5-4db4-9c3e-92622acb2178
 # ╟─f0f11355-abc5-4c3c-af7c-cffc781cb316
 # ╟─055cf6ac-2855-4f29-acbb-583d9a415d82
 # ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
-# ╟─5a11e3bb-1309-4689-9d2a-7d9e85765abb
+# ╠═5a11e3bb-1309-4689-9d2a-7d9e85765abb
 # ╟─c33841ff-c67a-49ca-bcef-d05a5ac3d842
 # ╟─a393c627-906d-4996-bbbd-cdf20c1db112
-# ╟─7d821ff3-fcd9-485d-8941-336745c0a35d
-# ╟─b107650b-490a-47a6-8b0a-1d096ea910a7
+# ╠═7d821ff3-fcd9-485d-8941-336745c0a35d
 # ╟─822102cb-52e3-4184-b74d-283275f3a291
 # ╟─e520500b-036c-4d84-b15c-9163ec2783a6
 # ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
-# ╟─ef758214-468f-4ba4-bb53-646f9eed6811
-# ╟─06d3f755-6c85-425d-930f-16ec0a6334a5
-# ╟─cdb77e2f-985b-454f-acf2-b42e5510966d
+# ╟─bb5d8129-8f07-40a8-8527-26bb53ab7d3f
 # ╟─530aae7d-c72f-4bc9-928a-ec75b3866d64
-# ╟─177660e1-4cb8-477b-acda-17ee3183925c
-# ╟─ec937014-e1eb-4908-ab42-04ed0cbb2a33
-# ╟─fe896a03-f584-44bd-9109-edfa42e4bb28
 # ╟─b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
 # ╟─2d44ed1c-54b8-4bdf-a853-255e22466e53
-# ╟─5473b416-7492-48a4-bdbd-c863c9f67d12
-# ╟─56bd4920-6be3-40c1-8256-ee2c2ab9da77
-# ╟─f60f56fd-af2c-4254-858e-13323742f12e
 # ╟─6ccbe255-748e-4e5a-bb3d-68500d1838be
 # ╟─0a2d3298-6c32-4c3d-a141-bd8c7a38655c
 # ╟─89458e61-c069-439e-a5bb-bc007d842af1
 # ╟─dc71cc6e-2543-4b8d-a0dc-9832b64165ff
-# ╟─7695bd99-7dd4-4453-83b3-82883cedebe0
-# ╟─e6801c1c-93b4-4a7c-93b3-230d57ada2da
 # ╟─c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
-# ╟─aae4b539-45e9-4d78-86d5-9ff53770450a
 # ╟─fef04dea-83d3-4c96-9331-68d3fde6cfc0
 # ╟─245aae0e-cba5-465f-a5b1-3443da3247f5
-# ╟─606f97b6-4693-44e8-bc76-34c656e1f047
+# ╠═606f97b6-4693-44e8-bc76-34c656e1f047
 # ╟─f93cfa73-67a0-4474-95c0-e468915c25bc
-# ╟─5da68585-bc48-4527-ac02-1787dd231adb
-# ╟─fc389b75-5bae-4abf-ba58-b833d2d7ae08
 # ╟─10498091-e583-442e-9ec4-b565a6cf61ce
-# ╟─d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
-# ╟─bb5bd06f-0b05-479a-8ce4-43d196876f62
 # ╟─7afc5069-a10f-435a-8f1f-277821ff6b72
 # ╟─4c29f5d6-db13-4111-ba6e-774a661b8692
-# ╟─6461f886-8fff-4e25-b44d-11f6259f7e69
-# ╟─4a4535d4-18cf-4132-929a-5f2deb6622b5
 # ╟─680ec799-71a7-4cd7-b8a2-f213a7a747b8
-# ╟─379d0bdd-f3bc-493d-b57a-b46f97b159f1
-# ╟─9789f2b0-64bb-4852-8a42-0644be047d76
 # ╟─5eb70803-f9bd-4073-b990-0ea723d9cb45
 # ╟─8e934f39-a170-4766-8f8b-50e9b559a67d
 # ╟─b4da11f5-b126-4bf8-8e4c-1d44ea22823c
