@@ -20,6 +20,9 @@ begin
 	PlutoUI.TableOfContents()
 end
 
+# ╔═╡ 23427302-1df4-4c72-80c1-cd9882bcfc39
+ChooseDisplayMode()
+
 # ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
 html"""
 	<h1 style="text-align:center">
@@ -304,7 +307,7 @@ ShortCodes = "~0.4.2"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.6"
+julia_version = "1.12.5"
 manifest_format = "2.0"
 project_hash = "46fccd725365a31c5ff33b7bfcd6dc19a9e9182f"
 
@@ -2105,6 +2108,7 @@ version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─23427302-1df4-4c72-80c1-cd9882bcfc39
 # ╠═c75a6f71-b75e-4269-8c80-0597bb15d96a
 # ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╠═e4a2007c-dffa-4301-91db-f586d38991e5

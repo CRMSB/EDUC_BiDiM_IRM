@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate("docs")
+Pkg.develop(Pkg.PackageSpec(path="."))
 using PlutoSliderServer
 
 PlutoSliderServer.export_directory("examples")
