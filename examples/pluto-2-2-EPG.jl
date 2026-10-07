@@ -44,6 +44,12 @@ html"""
 	</div>
 """
 
+# ╔═╡ 0b95dfa8-8528-4b18-864e-7b65058e05e0
+md"""
+Please download this file for the practical session at the IBIO platform: [Practical session](https://github.com/CRMSB/EDUC_BiDiM_IRM/blob/main/examples/pluto-2-2-EPG_Practical.jl)
+and run it as a Pluto notebook. 
+"""
+
 # ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
 md"
 
@@ -125,9 +131,9 @@ end
 
 # ╔═╡ 090d5994-6e13-4178-b0ab-ef62e1e0258d
 md"""
-Those two previous configurations are the basis functions of $F_0$ and  $F_1$, some EPG states. Now when we will talk about $F_0$ and $F_1$, we will know that we will be talking about the population of isochromats following this organization without describing each isochromat independently. 
-Note that only $F_0$ will give signal as the other states will be completely dephased !
+Those two previous configurations are the basis functions of $F_0$ and  $F_1$, some EPG states. Now when we will talk about $F_0$ and $F_1$, we will know that we will be talking about the population of isochromats following this organization without describing each isochromat independently.
 """
+
 
 # ╔═╡ f0697055-ac59-4906-925c-c25233d85bae
 begin
@@ -1137,11 +1143,6 @@ In this course, we mentioned phenomena like excitation, relaxation, precession, 
 
 """
 
-# ╔═╡ e6feb149-6c5e-4473-9512-cb8361cf1a46
-md"""
- # Next
-"""
-
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
 md"""
 # Helper functions
@@ -1193,6 +1194,11 @@ M_{xy}(p) = \exp(i2\pi p)
 \end{equation}$$
 
 """ |> hint
+
+# ╔═╡ 1eb4b0bd-857a-4a94-ac67-67c598b721fa
+md"""
+Note that only $F_0$ will give signal as the other states will be completely dephased !
+"""|>important
 
 # ╔═╡ be57d254-3fe7-44a5-85df-7483f8f4854b
 md"""
@@ -3605,173 +3611,174 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
-# ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
-# ╠═95e43cd5-9266-4eff-ad38-ab2393985ffd
-# ╠═9fd5b724-4634-4fd9-b397-bc1e8161394d
-# ╠═c3d72b3f-1467-46fa-a964-387c625fcd2f
-# ╠═9eede586-5ede-431e-be8c-8dc1a4869b5c
-# ╠═066f2d77-4a57-4396-a86a-9b5eed5e7896
-# ╠═0c73051a-f356-4094-9250-2cb1cc72201d
-# ╠═feb49760-e9de-4738-82cb-d2fa9c8b1376
+# ╟─0b95dfa8-8528-4b18-864e-7b65058e05e0
+# ╟─c33b213e-7656-11f1-a001-f39f9cc685b2
+# ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
+# ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
+# ╟─c3d72b3f-1467-46fa-a964-387c625fcd2f
+# ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
+# ╟─066f2d77-4a57-4396-a86a-9b5eed5e7896
+# ╟─0c73051a-f356-4094-9250-2cb1cc72201d
+# ╟─feb49760-e9de-4738-82cb-d2fa9c8b1376
 # ╟─4cecb481-e70f-4ed6-8a16-90ba400eed97
-# ╠═53bc8b12-8aa9-47f8-8749-0c7aebca433a
+# ╟─53bc8b12-8aa9-47f8-8749-0c7aebca433a
 # ╟─43302385-ba8a-4e7b-9cff-2c5bf977d5b8
-# ╠═7d096023-f932-481a-a3b1-8c290a77dd0c
-# ╠═090d5994-6e13-4178-b0ab-ef62e1e0258d
-# ╠═be57d254-3fe7-44a5-85df-7483f8f4854b
-# ╠═f0697055-ac59-4906-925c-c25233d85bae
-# ╠═e0b63072-46d2-4cf1-9e86-68658977f438
-# ╠═cd76a5df-6a9a-428e-af83-6d904c1b50b0
-# ╠═1cfb4b83-7b50-449e-94d4-52e751ae4180
-# ╠═3c9b9f6f-f117-4513-8a82-8bafcaacee64
-# ╠═fdee56d8-22d4-40d1-b59d-3ea436effb7a
-# ╠═53b7ae7e-6e93-43a9-9826-9da197ee8ff3
-# ╠═209e3560-56d0-4f97-8d47-d2fb30c6a145
-# ╠═8a41e907-2d6e-4fba-b750-bde13f044ed7
-# ╠═54b0044e-b662-4034-a844-6421b0a0af56
-# ╠═cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
+# ╟─7d096023-f932-481a-a3b1-8c290a77dd0c
+# ╟─090d5994-6e13-4178-b0ab-ef62e1e0258d
+# ╟─1eb4b0bd-857a-4a94-ac67-67c598b721fa
+# ╟─be57d254-3fe7-44a5-85df-7483f8f4854b
+# ╟─f0697055-ac59-4906-925c-c25233d85bae
+# ╟─e0b63072-46d2-4cf1-9e86-68658977f438
+# ╟─cd76a5df-6a9a-428e-af83-6d904c1b50b0
+# ╟─1cfb4b83-7b50-449e-94d4-52e751ae4180
+# ╟─3c9b9f6f-f117-4513-8a82-8bafcaacee64
+# ╟─fdee56d8-22d4-40d1-b59d-3ea436effb7a
+# ╟─53b7ae7e-6e93-43a9-9826-9da197ee8ff3
+# ╟─209e3560-56d0-4f97-8d47-d2fb30c6a145
+# ╟─8a41e907-2d6e-4fba-b750-bde13f044ed7
+# ╟─54b0044e-b662-4034-a844-6421b0a0af56
+# ╟─cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
 # ╟─07bfc15b-24c8-44e4-932f-6e19d8eab264
-# ╠═5ceb34a1-b95c-4bf8-aba2-71123881ee9b
-# ╠═7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
-# ╠═bbd683cb-db0c-492c-abc6-bfe16a727d00
-# ╟─1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
-# ╠═3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
-# ╠═e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
+# ╟─5ceb34a1-b95c-4bf8-aba2-71123881ee9b
+# ╟─7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
+# ╟─bbd683cb-db0c-492c-abc6-bfe16a727d00
+# ╠═1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
+# ╟─3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
+# ╟─e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
 # ╟─44197ff8-f9ba-4b96-b80d-30cc3187a0c6
 # ╟─e29d1009-e681-4ac7-8795-dd87b3cd29e3
-# ╠═44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
-# ╠═65a77af2-de1e-4514-8d74-197c58553be9
-# ╠═4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
-# ╠═84ce7725-9300-499c-bf2f-294587347720
-# ╠═72522850-f9d8-47bb-9f9f-05ff3e299e2f
-# ╠═2144b3dc-4f9d-4cea-b170-c12d069be630
-# ╠═8447240b-27a2-4df5-9366-2fad126a1651
-# ╠═c6842e09-7fba-45d0-b106-0864d0504c0e
-# ╠═0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
-# ╠═402e1e83-6f39-4951-84e1-022395cf9abc
-# ╠═4b77f7c2-ea87-4732-a967-58b2dabf6bfe
-# ╠═2307f7ec-b5bb-4bf4-807d-458b04b87e29
-# ╠═ff888489-f7c5-4267-bdfa-0779b4c9bd47
-# ╠═d7260975-4ba0-414e-8493-ecb35d674f9e
-# ╠═2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
-# ╠═44151964-9080-4975-a05f-de08a201df72
-# ╠═0fb76dd5-916c-451d-af0c-8de825615a9d
-# ╠═782ecb14-1383-4051-a94a-11667afb98ea
-# ╠═0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
-# ╠═342d3039-4d5f-4493-af7b-fb83d31df08f
-# ╠═9ca8976b-6ed4-4670-ab53-a1c65f0a628a
-# ╠═b7d18ce7-56ee-4924-8142-83e0cbfae698
-# ╠═20ad0308-6775-4650-93ce-8fe5f66dc746
-# ╠═6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
-# ╠═a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
-# ╠═9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
+# ╟─44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
+# ╟─65a77af2-de1e-4514-8d74-197c58553be9
+# ╟─4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
+# ╟─84ce7725-9300-499c-bf2f-294587347720
+# ╟─72522850-f9d8-47bb-9f9f-05ff3e299e2f
+# ╟─2144b3dc-4f9d-4cea-b170-c12d069be630
+# ╟─8447240b-27a2-4df5-9366-2fad126a1651
+# ╟─c6842e09-7fba-45d0-b106-0864d0504c0e
+# ╟─0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
+# ╟─402e1e83-6f39-4951-84e1-022395cf9abc
+# ╟─4b77f7c2-ea87-4732-a967-58b2dabf6bfe
+# ╟─2307f7ec-b5bb-4bf4-807d-458b04b87e29
+# ╟─ff888489-f7c5-4267-bdfa-0779b4c9bd47
+# ╟─d7260975-4ba0-414e-8493-ecb35d674f9e
+# ╟─2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
+# ╟─44151964-9080-4975-a05f-de08a201df72
+# ╟─0fb76dd5-916c-451d-af0c-8de825615a9d
+# ╟─782ecb14-1383-4051-a94a-11667afb98ea
+# ╟─0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
+# ╟─342d3039-4d5f-4493-af7b-fb83d31df08f
+# ╟─9ca8976b-6ed4-4670-ab53-a1c65f0a628a
+# ╟─b7d18ce7-56ee-4924-8142-83e0cbfae698
+# ╟─20ad0308-6775-4650-93ce-8fe5f66dc746
+# ╟─6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
+# ╟─a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
+# ╟─9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
 # ╠═b8839df7-50e7-4f68-b159-f5d59da124bc
-# ╠═f8e8eb72-5587-4a4c-8d3d-9d405a495d08
+# ╟─f8e8eb72-5587-4a4c-8d3d-9d405a495d08
 # ╟─6e3f40c6-de85-4536-8f1d-c714b58f8cdd
-# ╠═a6e7c563-0b40-4d0f-9f87-361c169501ab
+# ╟─a6e7c563-0b40-4d0f-9f87-361c169501ab
 # ╟─cde32749-6600-4e36-bf16-21827e5fefb5
-# ╠═816dfb87-d5c0-41e4-872e-e29319035047
-# ╠═71855601-5211-494a-a916-df606c4928c9
-# ╠═2e2a2750-fa16-437b-b313-6b20e966e814
-# ╠═218882cc-1ad4-4e50-9b01-5909435d56fc
-# ╠═35da0ef0-74a3-423e-922d-e24abddea5bf
-# ╠═e9adf55b-0851-4c1b-a468-c1e42d0389b8
-# ╠═a989690f-1da0-4330-9ec2-c93dc12e5fe0
-# ╠═4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
-# ╠═34f5d1f9-3add-44d8-ad05-4acb08921d82
-# ╠═07344fa6-7082-4cf9-a0ac-1c6230d967c2
-# ╠═8add0d61-2a42-49e4-927a-c0b1132503f5
-# ╠═a437b267-089e-48bf-85cf-a0288a99a294
-# ╠═63cb3219-59e0-4413-bb0a-ab65a0217a84
-# ╠═e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
-# ╠═0beeee18-bca7-4dc7-94b1-30058a36085b
-# ╠═be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
-# ╠═a8a706b8-5063-4997-b454-2cc915a1d3ed
-# ╠═0c9e9709-0f08-42cf-8ebe-34fb924364a9
-# ╠═68921972-27a3-4e3b-a7fd-076d8eda1622
-# ╠═0e0a39ed-d409-427f-b67a-4050d3a73810
-# ╠═41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
-# ╠═39933e22-95f5-4167-b8c6-9b1ee5a06d77
-# ╠═e3fa2fc9-443f-4590-bfc2-32c346c70b4d
-# ╠═70f9159c-0aa8-41f4-bea6-959e697ea3d1
-# ╠═349e6d5c-664a-4905-94fe-51f1f4690298
-# ╠═88d5304a-5578-473a-aae9-bc1b733bc8f3
-# ╠═cd4c5b9d-4e23-48d1-afa1-781d86563a1f
-# ╠═0415830d-0026-4392-8b0d-f699fe445cea
-# ╠═3698965a-6f37-4639-823f-cdc679d9dffb
-# ╠═0bbfc3dc-0e4b-498f-a966-50d46d31956f
-# ╠═37425a77-b7dc-406a-a563-20dd63ac5256
-# ╠═9094e9ad-392c-454d-aa8c-25cd567d900e
-# ╠═53f01777-e928-4227-a290-27fd5b6c42b8
-# ╠═5e4d9226-cc07-4acc-80e2-765966ec0656
-# ╠═ded0162b-4785-4b3f-8c2f-3b112bcf951d
-# ╠═53eb7112-dcc0-4373-ad43-225e14b6b94b
-# ╠═bccdb23f-057c-471b-8257-0851fdd9b853
-# ╠═4b629172-2340-4dab-a73a-0aabbea61011
-# ╠═3bc9286d-84d7-48cd-83dd-63499cd362e8
-# ╠═09a37845-57a0-4e05-a8f9-061cc77a5b44
-# ╠═34270e18-f966-49bb-9a0c-d39272ecbd43
-# ╠═caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
-# ╠═1baac32b-9472-48e4-bcd9-19bf34735784
-# ╠═74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
+# ╟─816dfb87-d5c0-41e4-872e-e29319035047
+# ╟─71855601-5211-494a-a916-df606c4928c9
+# ╟─2e2a2750-fa16-437b-b313-6b20e966e814
+# ╟─218882cc-1ad4-4e50-9b01-5909435d56fc
+# ╟─35da0ef0-74a3-423e-922d-e24abddea5bf
+# ╟─e9adf55b-0851-4c1b-a468-c1e42d0389b8
+# ╟─a989690f-1da0-4330-9ec2-c93dc12e5fe0
+# ╟─4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
+# ╟─34f5d1f9-3add-44d8-ad05-4acb08921d82
+# ╟─07344fa6-7082-4cf9-a0ac-1c6230d967c2
+# ╟─8add0d61-2a42-49e4-927a-c0b1132503f5
+# ╟─a437b267-089e-48bf-85cf-a0288a99a294
+# ╟─63cb3219-59e0-4413-bb0a-ab65a0217a84
+# ╟─e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
+# ╟─0beeee18-bca7-4dc7-94b1-30058a36085b
+# ╟─be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
+# ╟─a8a706b8-5063-4997-b454-2cc915a1d3ed
+# ╟─0c9e9709-0f08-42cf-8ebe-34fb924364a9
+# ╟─68921972-27a3-4e3b-a7fd-076d8eda1622
+# ╟─0e0a39ed-d409-427f-b67a-4050d3a73810
+# ╟─41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
+# ╟─39933e22-95f5-4167-b8c6-9b1ee5a06d77
+# ╟─e3fa2fc9-443f-4590-bfc2-32c346c70b4d
+# ╟─70f9159c-0aa8-41f4-bea6-959e697ea3d1
+# ╟─349e6d5c-664a-4905-94fe-51f1f4690298
+# ╟─88d5304a-5578-473a-aae9-bc1b733bc8f3
+# ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
+# ╟─0415830d-0026-4392-8b0d-f699fe445cea
+# ╟─3698965a-6f37-4639-823f-cdc679d9dffb
+# ╟─0bbfc3dc-0e4b-498f-a966-50d46d31956f
+# ╟─37425a77-b7dc-406a-a563-20dd63ac5256
+# ╟─9094e9ad-392c-454d-aa8c-25cd567d900e
+# ╟─53f01777-e928-4227-a290-27fd5b6c42b8
+# ╟─5e4d9226-cc07-4acc-80e2-765966ec0656
+# ╟─ded0162b-4785-4b3f-8c2f-3b112bcf951d
+# ╟─53eb7112-dcc0-4373-ad43-225e14b6b94b
+# ╟─bccdb23f-057c-471b-8257-0851fdd9b853
+# ╟─4b629172-2340-4dab-a73a-0aabbea61011
+# ╟─3bc9286d-84d7-48cd-83dd-63499cd362e8
+# ╟─09a37845-57a0-4e05-a8f9-061cc77a5b44
+# ╟─34270e18-f966-49bb-9a0c-d39272ecbd43
+# ╟─caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
+# ╟─1baac32b-9472-48e4-bcd9-19bf34735784
+# ╟─74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
 # ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
-# ╠═065491a5-e39b-431d-ad8e-42fcda40f34b
-# ╠═0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+# ╟─065491a5-e39b-431d-ad8e-42fcda40f34b
+# ╟─0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
 # ╟─f0f11355-abc5-4c3c-af7c-cffc781cb316
-# ╠═055cf6ac-2855-4f29-acbb-583d9a415d82
+# ╟─055cf6ac-2855-4f29-acbb-583d9a415d82
 # ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
 # ╟─5a11e3bb-1309-4689-9d2a-7d9e85765abb
-# ╠═c33841ff-c67a-49ca-bcef-d05a5ac3d842
-# ╠═a393c627-906d-4996-bbbd-cdf20c1db112
-# ╠═7d821ff3-fcd9-485d-8941-336745c0a35d
-# ╠═b107650b-490a-47a6-8b0a-1d096ea910a7
-# ╠═822102cb-52e3-4184-b74d-283275f3a291
-# ╠═e520500b-036c-4d84-b15c-9163ec2783a6
-# ╠═0f21e602-1779-45fc-ae8a-ae920f69e9fb
-# ╠═ef758214-468f-4ba4-bb53-646f9eed6811
-# ╠═06d3f755-6c85-425d-930f-16ec0a6334a5
-# ╠═cdb77e2f-985b-454f-acf2-b42e5510966d
-# ╠═530aae7d-c72f-4bc9-928a-ec75b3866d64
-# ╠═177660e1-4cb8-477b-acda-17ee3183925c
-# ╠═ec937014-e1eb-4908-ab42-04ed0cbb2a33
-# ╠═fe896a03-f584-44bd-9109-edfa42e4bb28
-# ╠═b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
-# ╠═2d44ed1c-54b8-4bdf-a853-255e22466e53
-# ╠═5473b416-7492-48a4-bdbd-c863c9f67d12
-# ╠═56bd4920-6be3-40c1-8256-ee2c2ab9da77
-# ╠═f60f56fd-af2c-4254-858e-13323742f12e
-# ╠═6ccbe255-748e-4e5a-bb3d-68500d1838be
-# ╠═0a2d3298-6c32-4c3d-a141-bd8c7a38655c
-# ╠═89458e61-c069-439e-a5bb-bc007d842af1
-# ╠═dc71cc6e-2543-4b8d-a0dc-9832b64165ff
-# ╠═7695bd99-7dd4-4453-83b3-82883cedebe0
-# ╠═e6801c1c-93b4-4a7c-93b3-230d57ada2da
-# ╠═c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
-# ╠═aae4b539-45e9-4d78-86d5-9ff53770450a
-# ╠═fef04dea-83d3-4c96-9331-68d3fde6cfc0
-# ╠═245aae0e-cba5-465f-a5b1-3443da3247f5
-# ╠═606f97b6-4693-44e8-bc76-34c656e1f047
-# ╠═f93cfa73-67a0-4474-95c0-e468915c25bc
-# ╠═5da68585-bc48-4527-ac02-1787dd231adb
-# ╠═fc389b75-5bae-4abf-ba58-b833d2d7ae08
-# ╠═10498091-e583-442e-9ec4-b565a6cf61ce
-# ╠═d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
-# ╠═bb5bd06f-0b05-479a-8ce4-43d196876f62
-# ╠═7afc5069-a10f-435a-8f1f-277821ff6b72
-# ╠═4c29f5d6-db13-4111-ba6e-774a661b8692
-# ╠═6461f886-8fff-4e25-b44d-11f6259f7e69
-# ╠═4a4535d4-18cf-4132-929a-5f2deb6622b5
-# ╠═680ec799-71a7-4cd7-b8a2-f213a7a747b8
-# ╠═379d0bdd-f3bc-493d-b57a-b46f97b159f1
-# ╠═9789f2b0-64bb-4852-8a42-0644be047d76
-# ╠═5eb70803-f9bd-4073-b990-0ea723d9cb45
-# ╠═8e934f39-a170-4766-8f8b-50e9b559a67d
-# ╠═b4da11f5-b126-4bf8-8e4c-1d44ea22823c
-# ╠═f797b917-7a76-443a-8154-3bc1b047f928
-# ╠═8faec62d-8380-4b2a-8440-2040e132e98c
-# ╠═e6feb149-6c5e-4473-9512-cb8361cf1a46
+# ╟─c33841ff-c67a-49ca-bcef-d05a5ac3d842
+# ╟─a393c627-906d-4996-bbbd-cdf20c1db112
+# ╟─7d821ff3-fcd9-485d-8941-336745c0a35d
+# ╟─b107650b-490a-47a6-8b0a-1d096ea910a7
+# ╟─822102cb-52e3-4184-b74d-283275f3a291
+# ╟─e520500b-036c-4d84-b15c-9163ec2783a6
+# ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
+# ╟─ef758214-468f-4ba4-bb53-646f9eed6811
+# ╟─06d3f755-6c85-425d-930f-16ec0a6334a5
+# ╟─cdb77e2f-985b-454f-acf2-b42e5510966d
+# ╟─530aae7d-c72f-4bc9-928a-ec75b3866d64
+# ╟─177660e1-4cb8-477b-acda-17ee3183925c
+# ╟─ec937014-e1eb-4908-ab42-04ed0cbb2a33
+# ╟─fe896a03-f584-44bd-9109-edfa42e4bb28
+# ╟─b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
+# ╟─2d44ed1c-54b8-4bdf-a853-255e22466e53
+# ╟─5473b416-7492-48a4-bdbd-c863c9f67d12
+# ╟─56bd4920-6be3-40c1-8256-ee2c2ab9da77
+# ╟─f60f56fd-af2c-4254-858e-13323742f12e
+# ╟─6ccbe255-748e-4e5a-bb3d-68500d1838be
+# ╟─0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+# ╟─89458e61-c069-439e-a5bb-bc007d842af1
+# ╟─dc71cc6e-2543-4b8d-a0dc-9832b64165ff
+# ╟─7695bd99-7dd4-4453-83b3-82883cedebe0
+# ╟─e6801c1c-93b4-4a7c-93b3-230d57ada2da
+# ╟─c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
+# ╟─aae4b539-45e9-4d78-86d5-9ff53770450a
+# ╟─fef04dea-83d3-4c96-9331-68d3fde6cfc0
+# ╟─245aae0e-cba5-465f-a5b1-3443da3247f5
+# ╟─606f97b6-4693-44e8-bc76-34c656e1f047
+# ╟─f93cfa73-67a0-4474-95c0-e468915c25bc
+# ╟─5da68585-bc48-4527-ac02-1787dd231adb
+# ╟─fc389b75-5bae-4abf-ba58-b833d2d7ae08
+# ╟─10498091-e583-442e-9ec4-b565a6cf61ce
+# ╟─d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
+# ╟─bb5bd06f-0b05-479a-8ce4-43d196876f62
+# ╟─7afc5069-a10f-435a-8f1f-277821ff6b72
+# ╟─4c29f5d6-db13-4111-ba6e-774a661b8692
+# ╟─6461f886-8fff-4e25-b44d-11f6259f7e69
+# ╟─4a4535d4-18cf-4132-929a-5f2deb6622b5
+# ╟─680ec799-71a7-4cd7-b8a2-f213a7a747b8
+# ╟─379d0bdd-f3bc-493d-b57a-b46f97b159f1
+# ╟─9789f2b0-64bb-4852-8a42-0644be047d76
+# ╟─5eb70803-f9bd-4073-b990-0ea723d9cb45
+# ╟─8e934f39-a170-4766-8f8b-50e9b559a67d
+# ╟─b4da11f5-b126-4bf8-8e4c-1d44ea22823c
+# ╟─f797b917-7a76-443a-8154-3bc1b047f928
+# ╟─8faec62d-8380-4b2a-8440-2040e132e98c
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
-# ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
+# ╟─54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.28
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -56,6 +56,9 @@ html"""
 		</p>
 	</div>
 """
+
+# ╔═╡ 626993e8-9759-48af-a110-57a694cebe4b
+ChooseDisplayMode()
 
 # ╔═╡ b50b352b-e1ef-45ae-992f-51adcc1f2da8
 md"""
@@ -4987,9 +4990,10 @@ version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╟─626993e8-9759-48af-a110-57a694cebe4b
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
 # ╟─c33b213e-7656-11f1-a001-f39f9cc685b2
-# ╠═b50b352b-e1ef-45ae-992f-51adcc1f2da8
+# ╟─b50b352b-e1ef-45ae-992f-51adcc1f2da8
 # ╟─e4a2007c-dffa-4301-91db-f586d38991e5
 # ╟─c6823721-6968-4c61-8d1f-244df943a84d
 # ╟─0ff274c4-a497-499b-af3c-46f13962ad59
