@@ -4,18 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    #! format: off
-    return quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-    #! format: on
-end
-
 # ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
 begin
 	# Layout ..
@@ -38,20 +26,17 @@ begin
 	PlutoUI.TableOfContents()
 end
 
-# ╔═╡ 0ddea6dc-2f55-439b-86f6-dfd85ba429b6
-ChooseDisplayMode()
-
 # ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
 html"""
 	<h1 style="text-align:center">
-		Biomedical Master : MRI cursus
+		Graduate Program - Biomedical MRI
 	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 1: Equation de Bloch
+			Lesson 3: The Extended Phase Graph framework
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
-			Aurélien Trotier
+			Nadège Corbin
 		</p>
 		<p style="font-size: 20px;">
 			CRMSB - Université de Bordeaux / CNRS
@@ -59,19 +44,18 @@ html"""
 	</div>
 """
 
+# ╔═╡ 0b95dfa8-8528-4b18-864e-7b65058e05e0
+md"""
+Please download this file for the practical session at the IBIO platform: [Practical session](https://github.com/CRMSB/EDUC_BiDiM_IRM/blob/main/examples/pluto-2-2-EPG_Practical.jl)
+and run it as a Pluto notebook. 
+"""
+
 # ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
 md"
 
-# 1. Basic of bloch-equation
-NMR signal can be simulated with the bloch equations :
-
-$\frac{d\vec{M}}{dt} = \gamma \vec{M} \times \vec{B}_{ext} + \frac{1}{T_1} (M_0 - M_z)\vec{z} - \frac{1}{T_2} \vec{M}_\perp$
-
-The idea is to simulate a spin isochromat (a large sample of spin with the same properties and seeing the same events) by applying onto it the equation.
-
-**This equation can be solved in simple cases :**
-1. Relaxation without precession
-2. RF excitations, gradients effects and off-resonance
+# 1. Introduction to EPG
+Isochromat-based simulations are really intuitive but require the simulation of many isochromats for optimum accuracy. This can be extremely time and memory consuming. The Extended Phase Graph approach is a more efficient alternative. 
+ 
 "
 
 
@@ -79,727 +63,1084 @@ The idea is to simulate a spin isochromat (a large sample of spin with the same 
 md"
 **Additionnal educational ressources :**
 
-A really good presentation of bloch equation simulation is also available in **Lecture-03A from Stanford Rad229 course** by Dr. Daniel Ennis. (check also Lecture-01D).
+A really good presentation of the EPG framework is available in **Lecture-04 from Stanford Rad229 course** by Dr. Daniel Ennis & Brian Hargreaves. This practical is largly inspired from theses lectures. 
 "
 
 # ╔═╡ c3d72b3f-1467-46fa-a964-387c625fcd2f
-YouTube("zhuc2J6nhvY")
+YouTube("bskhnaoJVNY")
 
 # ╔═╡ 9eede586-5ede-431e-be8c-8dc1a4869b5c
 md"
-## 1.1. Relaxation operator
+## 1.1. Visualization  
 
-When relaxation occurs 
+Let's focus on one voxel and look at one spatial direction (d) in this voxel.
 
-$$\begin{equation}
-\begin{split}
-\vec{M}(t+dt) &= \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}\vec{M}(t) +\begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix} \\
-&= A \ \vec{M}(t) +B
-\end{split}
-\end{equation}$$
+In this voxel, along this direction,  many isochromats are present. 
+Let's imagine the isochromats have all just been flipped into the transverse plane with an RF pulse.  
 
-It is possible to use a $4x4$ version, called homogeneous, that greatly simplify the calculus of succesive operators.
-
-$$\begin{equation}
-A_{4 \times 4} = \begin{bmatrix}
-A_{3x3} & B_{3x1}\\
-0 & 1
-\end{bmatrix}
-= \begin{bmatrix}
-E_2 & 0 & 0 & 0\\
-0 & E_2 & 0 & 0\\
-0 & 0 & E_1 & M_0(1-E_1)\\
-0 & 0 & 0 & 1
-\end{bmatrix}
-\end{equation}$$
-
-where $$E_1 = \exp{(-dt/T1)}$$ and $$E_2 = \exp{(-dt/T2)}$$
 "
 
-# ╔═╡ 35cc0ff7-14f7-4144-a1f0-5483c05e8732
+# ╔═╡ feb49760-e9de-4738-82cb-d2fa9c8b1376
 begin
-function recovery(dt,T1,T2)
-	E1 = exp(-dt/T1)
-	E2 = exp(-dt/T2)
-	A = diagm([E2, E2, E1,1])
-	A[3,4] = 1-E1
-return A
+  function visuMxy(Mxy)
+     f = Figure()
+      
+      N=25 # number of isochromats
+      
+      # transverse magnetization 
+	     ax1=Axis3(f[1,1],title = "Transverse ",xlabel="Mx",ylabel="My",zlabel="Position along d")
+	  
+      pos=LinRange(0,1,N)
+      zs=pos;
+      xs=zeros(length(pos))
+      ys=zeros(length(pos))
+
+      dz=zeros(length(pos))
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax1,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax1,(-1,1))
+	     ylims!(ax1,(-1,1))
+	   zlims!(ax1,(0,1))
+      f
+  end
+
+    Mxy_1(p)=1;
+
+    visuMxy(Mxy_1)
+
 end
 
-M_0 = [0;1;0;1]; # initial magnetization after tilt along Y axis
-A = recovery(100.0,1000,50)
-M_1 = A*M_0;
-A = recovery(600.0,1000,50)
-M_2 = A*M_0;
-A = recovery(5000.0,1000,50)
-M_3 = A*M_0
 
-end;
 
-# ╔═╡ 3a33ef9b-5948-4270-8c86-941a340a8029
+# ╔═╡ 4cecb481-e70f-4ed6-8a16-90ba400eed97
 md"""
-## 1.2. Rotations of the magnetization without relaxation
+In that case, they are in phase.
+Now let's imagine we have applied a gradient in this direction. 
+Such that there is 2$\pi$ between the first and the last isochromat. 
 """
 
-# ╔═╡ 3b5c3b6d-15a6-42c7-bae7-2e7a100cd1de
-md"""
-Rotations of the magnetization is used to simulate multiple events:
-- RF excitations that tilt the magnetization along an axis
-- Application of a magnetic gradient correspond to the rotation around the $B_0$-axis
-- Off-resonance that creates $T_2*$ decays or chemical shift
-
-For simplicity we will give you the equation to rotate the magnetization along x,y and z axis (you can verify on wikipedia that the implementation is correct)
-"""
-
-# ╔═╡ f3d04f2e-1c49-4abd-9fe2-6667dd5233b9
-md"""
-By convention the $B_0$ axis is aligned along the Z-axis but it is a convention. Be careful when you work with DIY magnet
-""" |> warning_box
-
-# ╔═╡ 638256aa-ef09-4afe-92ee-4ac9939a0f5d
-begin
-	#--------------------------------------------------------
-	#  By convention all rotations are left-handed
-	#--------------------------------------------------------
-	
-	""" xrot(angle = 0., in_degs = False)
-	Returns 4x4 matrix for left-handed rotation about x
-	"""
-	function xrot(angle = 0., in_degs = false)
-	    if in_degs
-	        angle = angle*π/180
-		end
-	    c = cos(angle)    
-	    s = sin(angle)    
-	    M = [[1,0,0,0] [0,c,-s,0] [0,s,c,0] [0,0.0,0.0,1]]'
-	end
-	
-	""" yrot(angle = 0., in_degs = false)
-	Returns 4x4 matrix for left-handed rotation about y
-	"""
-	function yrot(angle = 0., in_degs = false)
-	    if in_degs
-	        angle = angle*π/180
-		end
-	    c = cos(angle)    
-	    s = sin(angle)    
-	    M = [[c,0,s,0] [0,1,0,0] [-s,0,c,0] [0,0.0,0.0,1]]'
-	end
-	
-	""" zrot(angle = 0., in_degs = false)
-	Returns 4x4 matrix for left-handed rotation about y
-	"""
-	function zrot(angle = 0., in_degs = false)
-	    if in_degs
-	        angle = angle*π/180
-		end
-	    c = cos(angle)    
-	    s = sin(angle)    
-	    M = [[c,-s,0,0] [s,c,0,0] [0,0,1,0] [0,0.0,0.0,1]]'
-	end
-end;
-
-# ╔═╡ ec03551b-649c-4f33-9ccf-315f4f18968b
-md"""
-A good way to see if it works correctly is to plot an arrow. We will use the package `Makie.jl`. 
-
-You can learn more about it here : https://docs.makie.org/stable/
-
-You can play with the magnetization vector Marrow :
-"""
-
-# ╔═╡ 93df9818-a58b-4118-a612-7887d2aff92f
-begin
-	M_arrow = [0,0,1,1]
-	alpha = yrot(80.0,true)
-
-	M_arrow = alpha * M_arrow
-
-	# You can also apply recovery : 
-	A2 = recovery(50,1000.0,50)
-
-	M_arrow = A2 * M_arrow
-	
-end
-
-# ╔═╡ c3091f3d-cde9-4a25-a7c5-a3790f9eaf90
-begin
-	f = Figure()
-	ax = Axis3(f[1,1],title = "Magnetisation vector")
-	arrows3d!(ax,(0,0,0),tuple(M_arrow[1:3]...),
-			  tiplength=0.2,tipradius=0.1,
-			  color=:red)
-	
-	xlims!(ax,(-1,1))
-	ylims!(ax,(-1,1))
-	zlims!(ax,(-1,1))
-	f
-end
-
-# ╔═╡ c3876124-7c0a-4442-a8fa-ee51f144cc9e
-md"""
-Actually, the off-resonance effect is simulated along side the recovery. To do so we can apply a rotation along the z-axis right after the recovery step.
-
-The off-resonance is generally defined in hertz. For example at 3T, the off-resonance between the water and fat is -440 Hz.
-"""
-
-# ╔═╡ f8648cfe-01a9-4dff-a5ce-e980ef80a74e
-md"""
-## 1.3. Free precession operator
-"""
-
-# ╔═╡ fdd6c0dc-cba1-4b30-9f85-8e6f7057d971
-md"""
-Let's write an operator called `freeprecess(dt,T1,T2,df)` that perform both the recovery and the off-resonance.
-"""
-
-# ╔═╡ dff72c32-7972-4c7b-95f0-834b1615bcb7
-begin
-""" freeprecess(t,T1 = 2000, T2 = 100, df = 0)
-	
-Returns A function as a 4x4 matrix for freeprecession
-"""
-function freeprecess(t,T1 = 2000, T2 = 100, df = 0)
-	T1 = T1 * 1.
-	T2 = T2 * 1.
-	t = t * 1.
-	
-	phi = 2*pi*df*t/1000
-	E1 = exp(-t/T1)
-	E2 = exp(-t/T2)
-	A = diagm([E2, E2, E1,1])
-	A[3,4] = 1-E1
-	A = zrot(phi,false)*A
-	
-	return A
-end
-end;
-
-# ╔═╡ fc021473-d9cf-48d8-aa2a-fb84579c50b2
-md"""
-In order to see how the magnetization evoluate, we will apply create an operator with a small `dt` and apply it multiple times. 
-""" 
-
-# ╔═╡ 34dffba7-b26b-4754-9687-e102cb414771
-md"""
-For the answer we will use a slider to change the off-resonance value 
-"""
-
-# ╔═╡ 6cbba238-3bec-42a8-ac99-2c85647dc249
-@bind df_slider PlutoUI.Slider(-25:1:25, default=10, show_value=true)
-
-# ╔═╡ 1f7826fc-dcb0-421f-b4e4-48833da4d36f
-begin
-	function simuFID(df,dT,T,N::Int,T1,T2)
-    ## Simulation with offresonance 
-    A = freeprecess(dT,T1, T2, df)
-    # Simulate the decay
-	M = zeros(Float64,4,N)
-    # initiliaze aimantation along x (like flip angle 90°)
-    M[:,1] = [0,0,1,1]
-    M[:,1] = xrot(pi/2) * M[:,1]
-    # propagate the relaxation along the time
-    for k in range(1, N-1)
-      M[:,k+1] = A * M[:,k]
-	end
-	return M
-    end
-
-    # definition of parameters
-    df = 0
-	dT = 1
-	T = 1000
-	N = Int(ceil(T/dT))+1
-	T1 = 600
-	T2 = 100
-    
-    M_hz= simuFID(df_slider,dT,T,N,T1,T2)
-
-    # Let's plot the results
-    """ plot_magnetization(M::Matrix{<:Real};title="")
-
-    M::Matrix{<:Real} : Magnetization vector of size 3(or 4)xN where N is the number of steps
-    
-    Keywords :
-    - title of plots
-    """
-    function plot_magnetization(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
-    	f=Figure()
-    	ax = Axis(f[1,1],title=title)
-    	lines!(ax,M[1,:],label = "Mx")
-    	lines!(ax,M[2,:],label = "My")
-    	lines!(ax,M[3,:],label = "Mz")
-    	ax.xlabel= xlabel
-    	ax.ylabel="Mangnetization [ms]"
-    	axislegend()
-    	return f,ax
-    end
-end;
-
-# ╔═╡ dcad004e-6399-43fe-a02f-4109af02de30
-md"""
-# 2. Simulate sequence
-
-In the next section we will simulate multiple sequences :
-- Gradient Echo
-- Spin-Echo
-
-We will visualize how to optimize the choice of some parameters to change the contrast and we will talk about advanced effects like : 
-- dummy scans
-- steady-state
-- spoiling
-"""
-
-# ╔═╡ 3671f3e4-0556-4453-83cb-e718fa294241
-md"""
-## 2.1. Gradient echo
-
-Our goal it to simulate the value of the signal for a gradient echo sequence. We need to see the magnetization vector at a specific time-point called Echo Time (TE).
-
-To display how a sequence work we generally use a chronogram that represent how are played the events (gradient, RF, ADC) of a sequence along the time by the MRI scanner.
-
-![gre](https://mrsd.readthedocs.io/en/latest/_images/flash1.png)
-
-### 2.1.1. Signal evolution of the gradient echo
-During this notebook we will not take into account the gradient. What is important is that we will read the signal at the TE and repeat the RF pulse for every repetition time (TR).
-"""
-
-# ╔═╡ f199d95f-5656-4646-a774-a38bba6ceb68
-begin
-	df_2 = 0	# Hz off-resonance.
-	T1_2 = 1400	# ms.
-	T2_2 = 200	# ms.
-	TE_2 = 1    #ms
-	TR_2 = 100     #ms
-	alpha_2 = pi/3      #deg
-	Nex_2 = 50	# 20 excitations.
-
-	# define usefull matrix
-	Rflip = yrot(alpha_2)
-	Atr = freeprecess(TR_2,T1_2, T2_2, df_2)
-	Ate = freeprecess(TE_2,T1_2, T2_2, df_2)
-	Ate_50hz = freeprecess(TE_2,T1_2, T2_2, 50)
-	
-	M0_ge = [0,0,1,1] # initialize along Z
-	M_ge_tr1_0hz = Rflip * M0_ge # magnetization after flip
-	M_ge_tr1_0hz = Ate * M_ge_tr1_0hz # relaxation to TE
-
-	Mxy_tr1_0hz = sqrt(M_ge_tr1_0hz[1]^2+M_ge_tr1_0hz[2]^2)
-	
-	# with df = 10
-	M_ge_tr1_50hz = Rflip * M0_ge # magnetization after flip
-	M_ge_tr1_50hz = Ate_50hz * M_ge_tr1_50hz # relaxation to TE
-	Mxy_tr1_50hz = sqrt(M_ge_tr1_50hz[1]^2+M_ge_tr1_50hz[2]^2)
-
-	#println(Mxy_tr1_0hz)
-	#println(Mxy_tr1_50hz)
-end;
-
-# ╔═╡ 2a4fbac6-7da9-4719-84c0-75b2242b2ca4
-begin
-    function simuEchoDeGradient(df,alpha,TE,TR,NEX,T1,T2,spoiler = false)
-        Mte = zeros(Float32,4, NEX) # store magnetization for each TE
-    
-        Ate = freeprecess(TE,T1, T2, df)
-        Atr = freeprecess(TR,T1, T2, df)
-
-  
-        Rflip = yrot(alpha,true)
-        # initiliaze aimantation along z
-        M_tmp = [0,0,1,1]
-    
-        Mcount=1
-        for n in range(1,NEX)
-            M_tmp = Rflip * M_tmp
-            Mte[:,n] = Ate * M_tmp
-            M_tmp = Atr * M_tmp
-            if spoiler
-                M_tmp[1:2] .= 0 
-            end
-    	end
-        return Mte
-    end
-
-    Mte_alpha10 = simuEchoDeGradient(df_2,10,TE_2,TR_2,Nex_2,T1_2,T2_2)
-    Mte_alpha30 = simuEchoDeGradient(df_2,30,TE_2,TR_2,Nex_2,T1_2,T2_2)
-    Mte_alpha60 = simuEchoDeGradient(df_2,60,TE_2,TR_2,Nex_2,T1_2,T2_2)
-
-    function mag(M)
-        return [sqrt(M[1,i]^2+M[2,i]^2) for i in 1:size(M,2)]
-    end
-    
-    
-    f2 = Figure()
-    ax2 = Axis(f2[1,1], title = "Steady-state")
-    lines!(ax2, mag(Mte_alpha10),label = "alpha = 10°")
-    lines!(ax2, mag(Mte_alpha30),label = "alpha = 30°")
-    lines!(ax2, mag(Mte_alpha60),label = "alpha = 60°")
-    Legend(f2[1,2],ax2)
-    f2
-    
-    
-end;
-
-# ╔═╡ a421da06-8174-4852-9a94-b1f96c0a9b88
-md"""
-Let's do the same simulation / plot but this time we will apply a **spoiler** at the end of each TR.
-
-Applying a spoiler means that we want Mx=My=0. 
-In a real sequence this is performed by adding :
-- a spoiling gradient at the end of the sequence
-- a RF-spoiling
-
-In our case we will simplify it with an **ideal spoiler !**
-
-In our 4x4 formalism, it looks like :
-$$Spoil = \begin{bmatrix}
-0\ 0\ 0\ 0 \\
-0\ 0\ 0\ 0 \\
-0\ 0\ 1\ 0 \\
-0\ 0\ 0\ 1 \\
-\end{bmatrix}$$
-
-You can apply it with $M = Spoil * M_0$
-"""
-
-# ╔═╡ d50f4ef4-a9e3-4cfa-949c-4533fc274652
-begin
-    
-        Mte_alpha10_spoil = simuEchoDeGradient(df_2,10,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
-        Mte_alpha30_spoil = simuEchoDeGradient(df_2,30,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
-        Mte_alpha60_spoil = simuEchoDeGradient(df_2,60,TE_2,TR_2,Nex_2,T1_2,T2_2,true)
-        
-        f3 = Figure()
-        ax3 = Axis(f3[1,1], title = "Spoiled Steady-state")
-        lines!(ax3, mag(Mte_alpha10_spoil),label = "alpha = 10°")
-        lines!(ax3, mag(Mte_alpha30_spoil),label = "alpha = 30°")
-        lines!(ax3, mag(Mte_alpha60_spoil),label = "alpha = 60°")
-        hlines!(ax3,mag(Mte_alpha60_spoil)[end],linestyle =:dot)
-        Legend(f3[1,2],ax2)
-
-        f3
-end
-
-# ╔═╡ 4b860561-2dc1-4890-bbaf-1a7f02819d6e
-md"""
-For RF and Spoiled gradient echo, curves are now a lot smoother and the intensity signal of the steady-state is lower than the one simulated with the non-spoiled version.
-
-Another intersting point is that the steady-state value is higher for alpha = 30° thant alpha = 10° in this case.
-
---- 
-
-The first simulation was a **BSFFP : Balanced Steady State Free Precessin** sequence and the second is called a **RF and Spoiled gradient echo**.
-
-
-We will see more clearly what happens in a dedicated chapter on spoiling mecanism and gradient echo sequences.
-
-The number of TR necessary to reach that steady-state is called **dummy-scans** !
-
-**Note:** Generally the number of dummy-scans is small (< 20) but for some sequences, like the BSFFP / TrueFisp, this number increase and increase the total acquisition time of the sequence. Hopefully, preparation module has been developped to reduce this timing constraint, see: 
-
-[Deimling, M., and O. Heid. "Magnetization prepared true FISP imaging." Proceedings of the 2nd Annual Meeting of ISMRM, San Francisco. Vol. 495. 1994.](https://www.researchgate.net/profile/Oliver-Heid/publication/308954649_Magnetization_Prepared_True_FISP_Imaging/links/58a06509aca272046aad3719/Magnetization-Prepared-True-FISP-Imaging.pdf)
-"""
-
-# ╔═╡ 1f22c623-f4ae-476c-9456-c7479c902759
-md"""
-### 2.2.2. How to calculate steady state
-
-Analytical solution of the steady-state for the Spoiled Gradient-Echo can be calculated with the following equation : 
-
-$$M_{ss} = \frac{M_0(1 - E_1)}{1 - E_1 \cos(\alpha)}$$
-
-which gives, for $\alpha =$ $(alpha_2/pi*180) ° -  Mss = $(round((1-exp(-TR_2/T1_2))/(1-exp(-TR_2/T1_2)*cos(alpha_2)),digits=4))
-
----
-**Calculus using 3x3 formalism**
-
-It is possible to calculate the steady state using the bloch equation. If we wrote the sequence as consecutive operator acting on magnetization with the 3x3 formalism : 
-
-$$M = Aeq * M_0 + Beq$$
-
-where Aeq and Beq are the equivalent operator, for example : $Aeq = Atr * R_{α}$  and Beq = Btr
-
-In the case of the steady-state, the magnetization is the same at the end of the acquisition and before the next one $M = M_0 = M_{ss}$ which gives
-
-For 3x3 implementation : $M_{ss} = (I - Aeq)^{-1} * Beq$
-
-which is solved using the Moore-Penrose pseudo-inverse function `pinv`
-
----
-**Calculus using 4x4 formalism**
-
-For homogeneous formalism, the Aeq is the 3x3 part of the matrix and Beq is the 3x1 :
-
-$$\begin{equation}
-Aeq_{4 \times 4} = \begin{bmatrix}
-Aeq_{3x3} & Beq_{3x3}\\
-0 & 1
-\end{bmatrix}
-\end{equation}$$
-
-which gives :
-```julia
-Mss  = (I - Aeq[1:3,1:3])^{-1} * Aeq{4 \times 4}[1:3,4]
-```
-"""
-
-# ╔═╡ 7654ace2-29e8-4d2c-8f01-90506b621961
-begin
-	spoiler = [[0 0 0 0];[0 0 0 0];[0 0 1 0];[0 0 0 1]]
-
-	Aeq = spoiler * Atr * yrot(60,true)
-
-	Mss = pinv((I-Aeq)[1:3,1:3])*(Aeq)[1:3,4]
-end
-
-# ╔═╡ 9ac7a675-d0bb-4609-90df-d7fe20826481
-md"""
-## 2.2. Spin-Echo sequence
-
-### 2.2.1. What is a Spin-Echo
-A spin-echo sequence is the succession of the event : 
-1. RF pulse (generaly a 90°) f
-2. a delay of $\frac{TE}{2}$ 
-3. A second RF pulse (generaly a 180°)
-4. a delay of $\frac{TE}{2}$ 
-5. The signal is read at this position $TE$
-6. A delay which end at the TR (generally TR > 1s) 
-
-If we simulate the signal during the sequence we get this figure :
-"""
-
-# ╔═╡ a1eff48a-b734-4022-b72f-f9b220c36767
-function SpinEchoEvolution(;dT = 1,		# 1ms delta-time.
-	T = 1000,	# total duration
-	df = 5,	# Hz off-resonance.
-	T1 = 600,	# ms.
-	T2 = 100,	# ms.
-	TE = 50,	# ms.
-	TR = 500)	# ms.
-	
-	N1 = round(Int32,TE/2/dT)
-	N2 = round(Int32,(TR-TE/2)/dT)
-	
-	A = freeprecess(dT,T1,T2,df)
-	M = zeros(Float32,4, N1+N2+1)
-	M[:,1]=[0,0,1,1]
-	
-	Rflip = yrot(pi/2)
-	Rrefoc = xrot(pi)
-	
-	M[:,2]= A * Rflip * M[:,1]
-	
-	for k in range(3, N1+1)
-	    M[:,k] = A * M[:,k-1]
-	end
-		
-	M[:,N1+2]= A * Rrefoc * M[:,N1+1]   
-	
-	for k in range(2, N2)
-	    M[:,k + N1 + 1] = A * M[:,k + N1]
-	end
-	return M
-end
-
-# ╔═╡ 10f0b86b-b9be-417c-ac13-adb5d00e52de
-begin
-	f4,ax4 = plot_magnetization(SpinEchoEvolution();title="Aimantation of a spin echo")
-	vlines!(ax4,51,color=:black)
-	vlines!(ax4,26,color=:black,linestyle=:dot)
-	ax4.xticks=([0,26,50,collect(100:100:1000)...],["0",L"\frac{TE}{2}",L"TE",string.(100:100:1000)...])
-	xlims!(ax4,[-10,300])
-	f4
-end
-
-# ╔═╡ eada765f-eb05-4c75-bf8d-65c87f751e65
-md"""
-When we read $\frac{TE}{2}$ the magnetization along axis X and Z is reversed :
-
-$$\begin{equation} \begin{matrix}
-M_x^+(\frac{TE}{2}) = -M_x^-(\frac{TE}{2}) \\
-M_z^+(\frac{TE}{2}) = -M_z^-(\frac{TE}{2})
-\end{matrix}\end{equation}$$
-
-and the evolution of $M_y$ is inversed which bring the magnetization in phase at TE.
-"""
-
-
-# ╔═╡ a1f81c82-a99d-4281-8cf8-ed6ebc06627c
-md"""
-### 2.2.2. Off-resonance and Spin-Echo
-
-The Spin-Echo is really helpful to **compensate the off-resonance effect** that can occur in a voxel.
-
-To see the effect we will simulate 10 isochromats with various value of off-resonance (df)
-"""
-
-# ╔═╡ 981a3171-eb26-4198-a0c6-14bcab0612f4
-begin
-	function test(N_stochastic=10000)
-	# ---  Simulation Parameters ---
-		range_ = [-100,100]
-	T2star = 0.040   # 40 ms T2* 
-	γ_hz = (1/T2star) / (2pi)  # HWHM of Lorentzian distribution (~12.43 Hz)
-	t = range(0, 0.150, length=300) # Time vector up to 150 ms
-	
-	# --- 1. Setup Method A: random ---
-	
-	offsets_rand = 8*γ_hz*(rand(Float64,N_stochastic).-0.5)
-	
-	# Simulate dephasing: Mxy(t) = M0 * exp(i * 2π * f * t)
-	Mxy_rand_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_rand]
-	Mxy_rand_total = abs.(sum(Mxy_rand_spins, dims=2) ./ N_stochastic)
-
-		
-	# --- 2. Setup Method A: Stochastic (Random Cauchy) ---
-	
-	offsets_stoch = rand(Cauchy(0.0, γ_hz), N_stochastic)
-	# Clamp to avoid extreme outliers distorting the histogram view
-	offsets_stoch = clamp.(offsets_stoch, range_[1]*γ_hz, range_[2]*γ_hz) 
-	
-	# Simulate dephasing: Mxy(t) = M0 * exp(i * 2π * f * t)
-	Mxy_stoch_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_stoch]
-	Mxy_stoch_total = abs.(sum(Mxy_stoch_spins, dims=2) ./ N_stochastic)
-	
-	# --- 3. Setup Method B: Deterministic Isochromat Comb ---
-	offsets_det = range(-100*γ_hz, 100*γ_hz, length=N_stochastic)
-	weights = 1 ./ (2*pi .* γ_hz .* (1 .+ (offsets_det ./ γ_hz).^2))
-	weights ./= sum(weights) # Normalize
-	
-	Mxy_det_spins = [exp(im * 2π * f * ti) for ti in t, f in offsets_det]
-	Mxy_det_total = abs.(Mxy_det_spins * weights) # Weighted sum
-	
-	# Analytical T2* decay for reference
-	Mxy_analytical = exp.(-t ./ T2star)
-	
-	# --- 4. Plotting with Makie ---
-	fig = Figure(size = (900, 750), fontsize = 14)
-	
-	# Top Left: Histogram of Stochastic Spins
-	ax1 = Axis(fig[1, 1], 
-	    title = "Stochastic Sampling (N=$N_stochastic)", 
-	    xlabel = "Frequency Offset (Hz)", ylabel = "Density")
-	hist!(ax1, offsets_stoch, bins = ceil(Int,N_stochastic/2), normalization = :pdf, color = (:red, 0.5), label = "Sampled")
-	lines!(ax1, range(-5*γ_hz, 5*γ_hz, length=200), f -> 1/(pi*γ_hz*(1+(f/γ_hz)^2)), color = :black, linestyle = :dash, linewidth = 2)
-	xlims!(ax1,[-20,20])
-	
-	# Top center: Stem of Deterministic Isochromats
-	ax2 = Axis(fig[1, 2], 
-	    title = "Deterministic Isochromat Comb (N=$N_stochastic)", 
-	    xlabel = "Frequency Offset (Hz)", ylabel = "Weight")
-	stem!(ax2, offsets_det, weights, color = :blue, markersize = 6)
-	xlims!(ax2,[-20,20])
-
-	# Top Right: Stem of random Isochromats
-	ax4 = Axis(fig[1, 3], 
-	    title = "random (N=$N_stochastic)", 
-	    xlabel = "Frequency Offset (Hz)", ylabel = "Weight")
-	hist!(ax4, offsets_rand, bins = 100, normalization = :pdf,color = (:green,0.5))
-	xlims!(ax4,[-20,20])
-		
-	# Bottom: Decay Comparison
-	ax3 = Axis(fig[2, 1:3], 
-	    title = "Intra-Voxel Dephasing (T2*) Signal Decay", 
-	    xlabel = "Time (s)", ylabel = "|Mxy| Magnitude",
-	    limits = (nothing, nothing, 0, 1))
-	
-	lines!(ax3, t, Mxy_analytical, color = :black, linewidth = 3, label = "Analytical Exp(-t/T2*)")
-	lines!(ax3, t, vec(Mxy_rand_total), color = :green, linewidth = 2, linestyle = :dash, label = "random")
-	lines!(ax3, t, vec(Mxy_stoch_total), color = :red, linewidth = 2, linestyle = :dot, label = "Stochastic Simulation")
-	lines!(ax3, t, vec(Mxy_det_total), color = :blue, linewidth = 2, linestyle = :dash, label = "Deterministic Grid")
-	
-	axislegend(ax3, position = :rt)
-	
-	return fig
-	
-	end
-	fig = test(1000)
-end
-
-# ╔═╡ 9294ee6b-04f0-4bdf-a150-dfadff80222e
+# ╔═╡ 7d096023-f932-481a-a3b1-8c290a77dd0c
 begin 
-	function simuEchoSpinMultiDf(;nDf::Int64 = 1000,)
-	range_ = [-200,200]
-
-	M = SpinEchoEvolution(df=0)
-	M = zeros(eltype(M),size(M)...,nDf)
-
-	Δhz = 50
-	offsets_stoch = rand(Cauchy(0.0, Δhz), nDf)
-	# Clamp to avoid extreme outliers distorting the histogram view
-	offsets_stoch = clamp.(offsets_stoch, range_[1]*Δhz, range_[2]*Δhz) 
-	
-	#offsets_stoch = Δhz*rand(nDf)
-		
-	for (i,df) in enumerate(offsets_stoch)
-		M[:,:,i] = SpinEchoEvolution(df=df)
-	end
-	Mave = mean(M,dims=3)[:,:,1]
-	
-	##########################	
-	###### plot (note : TE position = 50+1 )
-	##########################
-	f=Figure()
-	ax = Axis(f[1,1],title="Magnetization evolution")
-	ax.xlabel="Time [ms]"
-	ax.ylabel="Mangnetization [ms]"
-	lines!(ax,sqrt.(M[1,:,1].^2+M[2,:,1].^2),label = "Mxy")
-	
-	lines!(ax,sqrt.(Mave[1,:].^2+Mave[2,:].^2),label = "Mxy of sum")
-	axislegend()
-
-	vlines!(ax,50+1,color=:black)
-	ax.xticks=([1,50+1,collect(100:100:1000)...],["0","TE",string.(100:100:1000)...])
-	
-	# plot phase
-	ax2 = Axis(f[2,1],title="Phase evolution of all the isochromate")
-	ax2.xlabel="Time [ms]"
-	ax2.ylabel="Phase [rad]"
-	
-	for i in 1:10
-		lines!(ax2,angle.(M[1,:,i]+im*M[2,:,i]))
-	end
-	vlines!(ax2,50+1,color=:black)
-	ax2.xticks=([0,50+1,collect(100:100:1000)...],["0","TE",string.(100:100:1000)...])
-
-		xlims!(ax,[0,100])
-		xlims!(ax2,[0,100])
-	f
+    Mxy_2(p)=exp(im*2*pi*p)
+    visuMxy(Mxy_2)
 end
-simuEchoSpinMultiDf(nDf = 100)
+
+# ╔═╡ 090d5994-6e13-4178-b0ab-ef62e1e0258d
+md"""
+Those two previous configurations are the basis functions of $F_0$ and  $F_1$, some EPG states. Now when we will talk about $F_0$ and $F_1$, we will know that we will be talking about the population of isochromats following this organization without describing each isochromat independently.
+"""
+
+
+# ╔═╡ f0697055-ac59-4906-925c-c25233d85bae
+begin
+  function visuMxy2D(Mxy)
+     f = Figure()
+      
+      N=25 # number of isochromats
+      
+      # transverse magnetization 
+	     ax=Axis(f[1,1],title = "Transverse ",xlabel="Mx",ylabel="My")
+	  
+      pos=LinRange(0,1,N)
+      xs=zeros(length(pos))
+      ys=zeros(length(pos))
+
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax,xs,ys,dx,dy,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax,(-1,1))
+	     ylims!(ax,(-1,1))
+      f
+  end
+
+
+    visuMxy2D(Mxy_2)
+
 end
+
+
+# ╔═╡ e0b63072-46d2-4cf1-9e86-68658977f438
+md"""
+However, it's not easy to represent a dephasing of more than $$$2\pi$$$ with the 2D representation, that's why we tend to use the 3D view with spatial location on the third axis more often. 
+"""
+
+# ╔═╡ 3c9b9f6f-f117-4513-8a82-8bafcaacee64
+begin
+    function visuMz(Mz)
+        f=Figure()
+            N=25
+      # longitudinal magnetization 
+      ax2=Axis3(f[1,1],title = "Longitudinal",xlabel="Position along d",ylabel="",zlabel="Mz")
+	  
+      pos=LinRange(0,1,N)
+      xs=pos;
+      ys=zeros(length(xs))
+      zs=zeros(length(xs))
+
+      dx=zeros(length(xs))
+      dy=zeros(length(xs))
+      dz=Mz.(xs)
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax2,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax2,(0,1))
+	     ylims!(ax2,(-1,1))
+	   zlims!(ax2,(-1,1))
+      f
+  end
+    
+    Mz_3(x)=1;
+ 
+    visuMz(Mz_3)
+         
+end
+
+# ╔═╡ 53b7ae7e-6e93-43a9-9826-9da197ee8ff3
+begin 
+    Mz_4(p)=cos(2*pi*p)
+    visuMz(Mz_4)
+end
+
+# ╔═╡ 209e3560-56d0-4f97-8d47-d2fb30c6a145
+md"""
+Those two previous configurations are the basis functions of $Z_0$ and $Z_1$.
+"""
+
+# ╔═╡ 8a41e907-2d6e-4fba-b750-bde13f044ed7
+md"""
+## 1.2. Formalization
+"""
+
+# ╔═╡ cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
+md"""
+  $F_n$ and $Z_n$ are the coefficients, but we sometimes use them to refer to the basis functions they multiply. 
+	
+"""|> warning_box
+
+# ╔═╡ 07bfc15b-24c8-44e4-932f-6e19d8eab264
+md"""
+## 1.3. Examples
+"""
+
+# ╔═╡ bbd683cb-db0c-492c-abc6-bfe16a727d00
+begin
+    Mxy_grad_2(p)=exp(im*4*pi*p)
+    visuMxy(Mxy_grad_2)
+end
+
+# ╔═╡ e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
+begin
+    Mxy_6(p)=im*exp(im*4*pi*p)
+    visuMxy(Mxy_6)
+end
+
+# ╔═╡ 65a77af2-de1e-4514-8d74-197c58553be9
+begin
+    Mxy_7(p)=exp(-im*4*pi*p)
+    visuMxy(Mxy_7)
+end
+
+# ╔═╡ 2144b3dc-4f9d-4cea-b170-c12d069be630
+begin
+    Mxy_8(p)=cos(2*pi*p)
+    visuMxy(Mxy_8)
+end
+
+# ╔═╡ 402e1e83-6f39-4951-84e1-022395cf9abc
+begin
+    Mxy_9(p)=im*cos(2*pi*p)
+    visuMxy(Mxy_9)
+end
+
+# ╔═╡ ff888489-f7c5-4267-bdfa-0779b4c9bd47
+begin
+    Mz_10(p)=sin(2*pi*p)
+    visuMz(Mz_10)
+end
+
+# ╔═╡ 0fb76dd5-916c-451d-af0c-8de825615a9d
+begin
+    Mxy_11(p)=0.5*exp(2*pi*im*p)
+    visuMxy(Mxy_11)
+  
+end
+
+# ╔═╡ 782ecb14-1383-4051-a94a-11667afb98ea
+begin
+
+    Mz_11(p)=0.5
+    visuMz(Mz_11)
+    
+end
+
+# ╔═╡ 9ca8976b-6ed4-4670-ab53-a1c65f0a628a
+begin
+    function visuClassic(Mxy,Mz)
+        f=Figure()
+            N=25
+     
+      ax=Axis3(f[1,1],title = "Classic View",xlabel="Mx",ylabel="My",zlabel="Mz")
+	  
+      pos=LinRange(0,1,N)
+      xs=zeros(length(pos));
+      ys=zeros(length(pos))
+      zs=zeros(length(pos))
+
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
+      dz=Mz.(pos)
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax,(-1,1))
+	     ylims!(ax,(-1,1))
+	   zlims!(ax,(-1,1))
+      f
+  end
+
+    
+    
+ 
+    visuClassic(Mxy_11,Mz_11)
+         
+end
+
+# ╔═╡ b7d18ce7-56ee-4924-8142-83e0cbfae698
+md"""
+Note that several states with different _n_ can exist together! 
+"""
+
+# ╔═╡ 9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
+begin
+
+    Mz_12(p)=sin(2*pi*p)
+    Mxy_12(p)=cos(2*pi*p)
+    visuClassic(Mxy_12,Mz_12)
+    
+end
+
+# ╔═╡ b8839df7-50e7-4f68-b159-f5d59da124bc
+visuMxy(Mxy_12)
+
+# ╔═╡ f8e8eb72-5587-4a4c-8d3d-9d405a495d08
+visuMz(Mz_12)
+
+# ╔═╡ 2e2a2750-fa16-437b-b313-6b20e966e814
+begin 
+	
+	function fromFtoM(Q)
+		N=size(Q,2)
+		Mxy=p -> Q[1,1]
+		Mz=p -> Q[3,1]
+		for n in 2:N
+			Mxy_old=Mxy
+			Mxy= p -> Mxy_old(p)+Q[1,n]*exp(2*im*pi*(n-1)*p)+conj.(Q[2,n])*exp(-2*im*pi*(n-1)*p)
+
+			Mz_old=Mz
+			Mz= p -> Mz_old(p)+2*Q[3,n]*exp(2*im*pi*(n-1)*p)
+		end
+		Mz_final=Mz
+		Mz=p->real(Mz_final(p))
+		return Mxy,Mz
+	end
+end
+
+
+# ╔═╡ 218882cc-1ad4-4e50-9b01-5909435d56fc
+begin 
+	
+	Q=[0 0.8; 0 0.2;0 0]
+	Mxy_13, Mz_13=fromFtoM(Q)
+	visuMxy(Mxy_13)
+end
+
+# ╔═╡ 35da0ef0-74a3-423e-922d-e24abddea5bf
+begin 
+	visuMxy2D(Mxy_13)
+end
+
+# ╔═╡ a989690f-1da0-4330-9ec2-c93dc12e5fe0
+begin 
+	F1plus=[0 0.8;0 0;0 0]
+	Mxy_F1plus,Mz_F1plus=fromFtoM(F1plus)
+	visuMxy2D(Mxy_F1plus)
+end
+
+# ╔═╡ 4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
+begin
+	F1minus=[0 0;0 0.2;0 0]
+	Mxy_F1minus,Mz_F1minus=fromFtoM(F1minus)
+	visuMxy2D(Mxy_F1minus)
+end
+
 
 # ╔═╡ 34f5d1f9-3add-44d8-ad05-4acb08921d82
 md"""
-# Conclusion
+## 1.4. Interim conclusion
+The EPG framework is a method to simulate MR signal efficiently. 
 
-Bloch simulation is a useful tool for MR signal and can be easily extended to incorporate more advanced physics effect like : 
-- Magnetization Transfert (MT)
-- Diffusion
+With the EPG framework we assume that gradient areas are quantized into units that give a phase twist of one cycle across a voxel so that we can easily represent large groups of isochromats with a simple Fourier basis and accurately calculate MR signals.
 
-It is also espcially useful to simulate **RF excitation slice-profile**, more on that in a dedicated course !
+Multiple implementation of the EPG framework exist:
+- MRZero (https://mrsources.github.io/MRzero-Core/) **Python**
+- EPG-X (https://github.com/mriphysics/EPG-X) **MATLAB**
+- Sycomore (https://sycomore.readthedocs.io/en/latest/) **Python**
+- EPGSim (https://github.com/MagneticResonanceImaging/EPGsim.jl) **Julia**
+- ...
 
-You can find various ressources online that implement Bloch-Simulation (non exhaustive list):
+In this section we described the fundamentals of the EPG framework and developped intuition about the concept of states. 
 
-- BlochSim.jl - **julia**
-- MRIgeneralizedBloch.jl - **julia**
-- [BlochSimulators.jl](https://github.com/MagneticResonanceImaging/BlochSimulators.jl) - **julia**
-- [BlochSim](https://github.com/ZhengguoTan/BlochSim) - **python**
-- Check [rad229](https://github.com/mribri999/MRSignalsSeqs) using initial implementation of hargreaves - **matlab / python**
-- [mcmrsimulator](https://open.oxcin.ox.ac.uk/pages/ndcn0236/mcmrsimulator.jl/stable/) monte carlo simulator for diffusion with membrane permeability, geometry **Julia**
-- [bloch_sim](https://github.com/tomokell/bloch_sim) - **Matlab**
-- [BM_fim_fit](https://github.com/cest-sources/BM_sim_fit/) - **Matlab**
+In the next session, we will explore how RF pulses, gradients, and relaxation phenomena are modeled within the EPG framework."
+"""
 
-For sequence simulation, **KomaMRI.jl** is one of the main package (with **MRZero**) and they optimized bloch simulation to simulate the results of a sequence.
+# ╔═╡ 07344fa6-7082-4cf9-a0ac-1c6230d967c2
+md"
 
-# Next
+# 2. Basic operators in EPG 
+Now we know how to describe any distribution of isochromats with the Q matrix which gives a coefficient for each state. How can we now modify this configuration? What is the effect of the relaxation, the precession, an RF pulse or  a gradient on the Q matrix ?  
+"
 
-Bloch simulation can be computationaly intensive because you need to create a lot of isochromate in order to average random effects. This is especially true when you want to simulate the effect of a gradient spoiler (More information about that later). 
+# ╔═╡ 8add0d61-2a42-49e4-927a-c0b1132503f5
+YouTube("kToL-9ZTzCs")
 
-But different approaches has been developped over the years to find a way to average the effect in simulation like
-: **Phase Distribution Graph** used in MRZero and **Extended Phase Graph** (EPG)
+# ╔═╡ 63cb3219-59e0-4413-bb0a-ab65a0217a84
+md"""
+## 2.1 Precession 
 
-In the next chapter, you will learn to manipulate EPG !
+Precession is a simple rotation of $\theta$ about the Z axis:
+
+
+$$\begin{equation}
+\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix} =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix} 
+\end{equation}$$
+
+
+By linearity of the Fourier transform:
+
+$$\begin{equation}
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} 
+\end{equation}$$
+
+and therefore more concisely:
+
+$$\begin{equation}
+Q =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+Q
+\end{equation}$$
+
+
+"""
+
+# ╔═╡ 0beeee18-bca7-4dc7-94b1-30058a36085b
+begin
+Q14a=[0.1 0 0.2*im;0.1 0.3 0; 0 0.5*im 0]
+
+Mxy_14a, Mz_14a=fromFtoM(Q14a)
+visuClassic(Mxy_14a,Mz_14a)
+
+end
+
+
+
+# ╔═╡ be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
+begin
+theta=2*pi*50*0.01
+Rx=[exp(im*theta) 0 0; 0 exp(-im*theta) 0; 0 0 1]
+	Q14b=Rx*Q14a;
+	Mxy_14b, Mz_14b=fromFtoM(Q14b)
+visuClassic(Mxy_14b,Mz_14b)
+end
+
+# ╔═╡ a8a706b8-5063-4997-b454-2cc915a1d3ed
+md"""
+
+## 2.2 Gradients 
+ Gradients induce one cycle ($2\pi$) of phase across a voxel. 
+ Therefore, applying a _unit_ gradient results in : 
+- shifting the magnetization in $F_n^+$ into $F_{n+1}^+$ (*Dephasing*)
+- **AND** shifting the magneztization in $F_n^-$ into $F_{n-1}^-$ (*Rephasing*)
+Note that applying a gradient does not affect Z states. 
+
+If the gradient applied induces $p*2\pi$ dephasing, the magnetization moved from $F_n^+$  to $F_{n+p}^+$ and from $F_n^-$ to $F_{n-p}^-$. 
+"""
+
+# ╔═╡ 0e0a39ed-d409-427f-b67a-4050d3a73810
+md"""
+Explanation: 
+
+-  $0.5$ of$F_0^+$ moves in $F_1^+$ 
+-  $0.25$ of $F_1^+$ moves in $F_2^+$
+-  $0.1i$ of $F_1^-$ moves in $F_0^-$
+- Given that $F_0^+$=$(F_0^-)^*$, then $(0.1i)^*=-0.1i$ goes to $F_0^+$
+"""
+
+# ╔═╡ 41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
+begin
+Q_15a=[0.5 0.25 0;0.5 0.1*im 0; 0 0.2 0]
+	Mxy_15a, Mz_15a=fromFtoM(Q_15a)
+visuMxy2D(Mxy_15a)
+end
+
+# ╔═╡ 39933e22-95f5-4167-b8c6-9b1ee5a06d77
+begin
+Q_15b=[-0.1*im 0.5 0.25;0.1*im 0 0; 0 0.2 0]
+	Mxy_15b, Mz_15b=fromFtoM(Q_15b)
+visuMxy2D(Mxy_15b)
+end
+
+# ╔═╡ e3fa2fc9-443f-4590-bfc2-32c346c70b4d
+md"""
+
+## 2.3 Relaxation 
+Relaxation  over the time T is both an attenuation of the states:
+-  $F_n^+$  and $F_n^-$ are multiplied by the attenuation factor $e^{-T/T_2}$ 
+-  $Z_n$ are multiplied by the attenuation factor $e^{-T/T_1}$
+And also a recovery of the state $Z_0$ which becomes $M_0(1-e^{-T/T_1})+Z_0exp(-T/T_1))$
+
+"""
+
+# ╔═╡ 349e6d5c-664a-4905-94fe-51f1f4690298
+begin 
+Q_16=[-0.1*im 0.5 0.25; 0.1*im 0 0 ; 0 0.2*im 0]
+Mxy_16,Mz_16=fromFtoM(Q_16)
+visuClassic(Mxy_16,Mz_16)
+end	
+
+# ╔═╡ 88d5304a-5578-473a-aae9-bc1b733bc8f3
+begin 
+Q_16b=Q_16*[exp(-20/40) 0 0; 0 exp(-20/40) 0; 0 0 exp(-20/100)]
+Q_16[3,1]=Q_16[3,1]+(1-exp(-20/100))
+Mxy_16b,Mz_16b=fromFtoM(Q_16b)
+visuClassic(Mxy_16b,Mz_16b)
+end	
+
+# ╔═╡ cd4c5b9d-4e23-48d1-afa1-781d86563a1f
+md"""
+## 2.4 RF pulse
+
+A radiofrequency pulse (with a flip angle of $\alpha$ and a phase of $\phi$) only mixes states of the same order:
+
+
+$$\begin{equation}
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} =  
+\begin{bmatrix} 
+cos^2(\alpha/2) & e^{2i\phi}sin^2(\alpha/2) & -ie^{i\phi}sin \alpha  \\ 
+e^{-2i\phi}sin^2(\alpha/2) & cos^2(\alpha/2) & ie^{-i\phi}sin(\alpha)\\ 
+-i/2e^{-i\phi}sin(\alpha) & i/2e^{i\phi}sin(\alpha) & cos(\alpha) 
+\end{bmatrix} 
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} 
+\end{equation}$$
+
+
+This is the same rotation matrix as for $\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix}$.
+
+"""
+
+
+
+# ╔═╡ 0bbfc3dc-0e4b-498f-a966-50d46d31956f
+begin
+	function applyRF(alpha,phi)
+	R=[cos(alpha/2)^2 exp(2*im*phi)*sin(alpha/2)^2 -im*exp(im*phi)*sin(alpha);
+		exp(-2*im*phi)*sin(alpha/2)^2 cos(alpha/2)^2 im*exp(-im*phi)*sin(alpha);
+		-im/2*exp(-im*phi)*sin(alpha) im/2*exp(im*phi)*sin(alpha) cos(alpha)]
+	return R
+end
+end
+
+# ╔═╡ 5e4d9226-cc07-4acc-80e2-765966ec0656
+begin 
+	Q_17b=[0;0;1]
+	R_17b=applyRF(pi/2,0)
+	Q_17b=R_17b*Q_17b
+	Mxy_17b,Mz_17b=fromFtoM(Q_17b)
+	visuClassic(Mxy_17b,Mz_17b)
+end
+
+# ╔═╡ 4b629172-2340-4dab-a73a-0aabbea61011
+md"""
+First let's draw the initial configuration.
+"""
+
+# ╔═╡ 3bc9286d-84d7-48cd-83dd-63499cd362e8
+begin 
+	Q_18=[0 1;0 0;0 0]
+	Mxy_18,Mz_18=fromFtoM(Q_18)
+	visuClassic(Mxy_18,Mz_18)
+end
+
+# ╔═╡ 09a37845-57a0-4e05-a8f9-061cc77a5b44
+
+begin
+	R18=applyRF(60*pi/180,pi/2)
+	Q_18after=R18*Q_18;
+	Mxy_18after,Mz_18after=fromFtoM(Q_18after)
+	visuClassic(Mxy_18after,Mz_18after)
+end
+
+
+# ╔═╡ 34270e18-f966-49bb-9a0c-d39272ecbd43
+md"""
+A longitudinal component with the initial phase twist has been created, $Z_1$ is therefore populated. 
+"""
+
+# ╔═╡ caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
+begin
+	visuMz(Mz_18after)
+end
+
+# ╔═╡ 1baac32b-9472-48e4-bcd9-19bf34735784
+md"""
+A transverse component remains which now has an elliptical distribution and the same phase twist,which corresponds to the sum of the population in state $F_1^+$ and $F_1^-$ (as explained before)
+"""
+
+# ╔═╡ 74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
+begin
+	visuMxy2D(Mxy_18after)
+end
+
+# ╔═╡ 065491a5-e39b-431d-ad8e-42fcda40f34b
+begin
+Q_19=[0 im;0 0;0 0]
+Mxy_19,Mz_19=fromFtoM(Q_19)
+visuClassic(Mxy_19,Mz_19)
+end
+
+# ╔═╡ 0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+begin
+R19=applyRF(pi,0)
+	Q_19after=R19*Q_19;
+Mxy_19after,Mz_19after=fromFtoM(Q_19after)
+visuClassic(Mxy_19after,Mz_19after)
+end
+
+# ╔═╡ 055cf6ac-2855-4f29-acbb-583d9a415d82
+md"""
+## 2.5 Interim conclusion 
+"""
+
+# ╔═╡ 5a11e3bb-1309-4689-9d2a-7d9e85765abb
+md"""
+Other phenomena like diffusion or magnetization transfer can be simulated with the EPG framework. 
+- Diffusion: [Weigel,JMR,2010](https://pubmed.ncbi.nlm.nih.gov/20542458/)
+- Magnetization Transfer: [Malik,MRM,2017](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.27040)
+
+The next section consists in simulating RF pulse sequences with the EPG framework. 
+"""
+
+# ╔═╡ c33841ff-c67a-49ca-bcef-d05a5ac3d842
+md"""
+ # 3. Simulation of MRI sequences
+ ## 3.1. Multi-echo spin-echo 
+Let's start with a multi echo spin-echo sequence
+![Fig1]
+(https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig1.png?raw=true)
+"""
+
+# ╔═╡ b107650b-490a-47a6-8b0a-1d096ea910a7
+begin
+	#initialization
+	TE=20
+	T1=1000
+	T2=100
+	Q_20=[0 0 0;0 0 0;1 0 0]
+	#RF pulse
+	R20=applyRF(pi/2,0);
+	Q_20=R20*Q_20;
+	#Relaxation
+	Q_20=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q_20;
+	Q_20[3,1]=Q_20[3,1]+(1-exp(-(TE/2)/T1))
+	#Crusher
+	Q_20[1,:]=circshift(Q_20[1,:],1)
+	Q_20[2,:]=circshift(Q_20[2,:],-1)
+	Q_20[1,1]=conj(Q_20[2,1])
+	Q_20[2,end]=0;
+	# refocussing pulse 
+	R20refoc=applyRF(pi,0);
+	Q_20=R20refoc*Q_20;
+	# Crusher
+	Q_20[1,:]=circshift(Q_20[1,:],1)
+	Q_20[2,:]=circshift(Q_20[2,:],-1)
+	Q_20[1,1]=conj(Q_20[2,1])
+	Q_20[2,end]=0;
+	#Relaxation
+	Q_20=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q_20;
+	Q_20[3,1]=Q_20[3,1]+(1-exp(-(TE/2)/T1))
+	#Readout
+	print(round.(Q_20,digits=2))
+	Mxy_20,Mz_20=fromFtoM(Q_20)
+	visuClassic(Mxy_20,Mz_20)
+
+end
+
+# ╔═╡ ef758214-468f-4ba4-bb53-646f9eed6811
+begin
+	function MESE(alpha,phi,N,TE,T1,T2,dispfig)
+		
+		fig = Figure(size=(900,800*ceil(Int,N/4)))
+
+		#initialization
+		S=zeros(Float64,N)
+		Time=zeros(Float64,N)
+		Q=zeros(ComplexF64,3,N)
+		R=zeros(ComplexF64,3,3)
+		Rrefoc=zeros(ComplexF64,3,3)
+		Q[3,1]=1;
+	
+		
+		#RF pulse
+		R=applyRF(pi/2,0);
+		Q=R*Q;
+	
+		for ec in 1:N
+
+			#Relaxation
+			Q=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q;
+			Q[3,1]=Q[3,1]+(1-exp(-(TE/2)/T1))
+			
+			if dispfig==1
+			ax=Axis(fig[ec,1],ylabel="n",title=" Before Crush; Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = Q[r, c]
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			#Crusher
+			Q[1,:]=circshift(Q[1,:],1)
+			Q[2,:]=circshift(Q[2,:],-1)
+			Q[1,1]=conj(Q[2,1])
+			Q[2,end]=0;
+
+			if dispfig==1
+			ax=Axis(fig[ec,2],ylabel="n",title=" After Crush, Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			# refocussing pulse 
+			Rrefoc=applyRF(alpha,phi);
+			Q=Rrefoc*Q;
+			
+			
+			if dispfig==1
+			ax=Axis(fig[ec,3],ylabel="n",title=" After 180 , Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+	
+			# Crusher
+			Q[1,:]=circshift(Q[1,:],1)
+			Q[2,:]=circshift(Q[2,:],-1)
+			Q[1,1]=conj(Q[2,1])
+			Q[2,end]=0;
+
+			if dispfig==1
+			ax=Axis(fig[ec,4],ylabel="n",title=" After Crush; Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			#Relaxation
+			Q=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q;
+			Q[3,1]=Q[3,1]+(1-exp(-(TE/2)/T1))
+
+			#Readout
+			S[ec]=abs.(Q[1,1]);
+			Time[ec]=ec*TE;		
+			
+		end
+		return Q,S,Time,fig;
+	end
+
+	alpha=pi; N=6;
+	phi=0
+	a,b,c,fig=MESE(alpha,phi,N,TE,T1,T2,1)
+	fig
+
+end
+
+# ╔═╡ 06d3f755-6c85-425d-930f-16ec0a6334a5
+begin
+	
+	Q_20b,S_20b,Time_20b=MESE(alpha,phi,32,TE,T1,T2,0)
+	theory=exp.(-Time_20b/T2)
+	fig_20b=lines(Time_20b,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
+	scatter!(Time_20b,S_20b,marker='*',color=:coral,markersize=30,label="EPG")
+	axislegend()
+
+end
+
+# ╔═╡ 177660e1-4cb8-477b-acda-17ee3183925c
+begin 
+alpha_20c=170*pi/180;
+	aa,bb,cc,fig_20c_Q=MESE(alpha_20c,phi,N,TE,T1,T2,1)
+	fig_20c_Q
+end
+
+# ╔═╡ ec937014-e1eb-4908-ab42-04ed0cbb2a33
+begin
+	Q_20c,S_20c,Time_20c=MESE(alpha_20c,phi,32,TE,T1,T2,0)
+	fig_20c=lines(Time_20c,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
+	scatter!(Time_20c,S_20c,marker='*',color=:coral,markersize=30,label="EPG")
+	axislegend()
+end
+
+# ╔═╡ 5473b416-7492-48a4-bdbd-c863c9f67d12
+begin 
+alpha_20d=170*pi/180;
+phi_20d=pi/2
+aaa,bbb,ccc,fig_20d_Q=MESE(alpha_20d,phi_20d,N,TE,T1,T2,1)
+fig_20d_Q
+end
+
+# ╔═╡ 56bd4920-6be3-40c1-8256-ee2c2ab9da77
+begin
+	Q_20d,S_20d,Time_20d=MESE(alpha_20d,phi_20d,32,TE,T1,T2,0)
+	fig_20d=lines(Time_20d,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
+	scatter!(Time_20d,S_20d,marker='*',color=:coral,markersize=30,label="EPG")
+	axislegend()
+end
+
+# ╔═╡ 0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+md"""
+It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherrence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
+
+![Fig2](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig2.png?raw=true)
+
+**Interpretation**: 
+The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$,the perfect refocussing pulse entirely moves this population into $F_1^-$, which is then moved back into $F_0$ by the second crusher, this is the first echo. Next echoes are created the same way.
+
+Now let's look at the case where refocussing pulses are imperfect. 
+![Fig3](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig3.png?raw=true)
+
+**Interpretation**: 
+- The primary echo pathway (in red) still exists, but other pathways also contribute to the echo formation. 
+- Blue pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse leaves $F_1+$ not empty. The second crusher moves this residual population to $F_2^+$. The following cusher moves this population to $F_3^+$. A part of this population is then moved to $F_3^-$ by the following refocussing pulse. Three crushers later, this populations moves back to $F_0$ to contribute to the third echo. 
+- Green pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse moves a part of thi spopulation into $Z_1$. This sub-population stays there until the next refocussing pulse, which moves a part of this state into $F_1^-$. The following crusher moves this residual population into $F_0$ to contribute to the second echo. This is callled a **stimulated echo**. 
+
+"""
+
+# ╔═╡ 89458e61-c069-439e-a5bb-bc007d842af1
+md"""
+
+## 3.2 Steady state sequences
+Let's now focus on steady-state sequences. Their specificity is their short TR. This means that the transverse component has not vanished before the next excitation. Two alternatives are then available: 
+- Reuse the transverse magnetization
+- Or "destroy" it
+
+We will first focus on the second option. 
+
+### 3.2.1 Spoiled gradient echo 
+
+In theory, if we completely destroy the transverse magnetization at the end of each TR, the signal is :
+
+$\begin{equation} S = \rho \frac{1 - e^{-TR/T1}}{1 - \cos(\alpha) e^{-TR/T1}} \sin(\alpha) \end{equation}$
+
+Two spoiling techniques are employed to limit the contribution of the transverse component across excitations: 
+- Gradient spoiling: Rephasing and spoiling are merged together to impose a \$2\pi\$ dephasing at the end of the TR. 
+- RF spoiling: the phase of the RF pulse is constantly changing from TR to TR such as $\phi(n)=(\phi_0/2)(n+1)n$
+
+Here is the pulse sequence diagram of the spoiled gradient echo. 
+![Fig4](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/spoiledGRE.png?raw=true)
+
+"""
+
+
+# ╔═╡ 7695bd99-7dd4-4453-83b3-82883cedebe0
+begin 
+ function spGRE(TE,TR,alpha,phi0,nTR,T1,T2,destroyMxy)
+	 Q=zeros(ComplexF64,3,nTR)
+  Q_temp=zeros(ComplexF64,3,nTR)
+	 S=zeros(ComplexF64,nTR)
+  R=zeros(ComplexF64,3,3)
+	 Q[3,1]=1;
+  for k in 0:nTR-1
+	
+		 phi=(phi0/2)*(k+1)*k;
+		 R=applyRF(alpha,phi)
+		 Q=R*Q;
+		 
+		 # Relaxation 
+		 Q=[exp(-TE/T2) 0 0; 0 exp(-TE/T2) 0; 0 0 exp(-TE/T1)]*Q;
+	   Q[3,1]=Q[3,1]+(1-exp(-TE/T1))
+
+		 Q_temp=Q;
+	
+		 S[k+1]=Q[1,1]*exp(-im*phi)
+	     
+		 # Crusher
+	 	Q[1,:]=circshift(Q[1,:],1)
+ 	Q[2,:]=circshift(Q[2,:],-1)
+ 	Q[1,1]=conj(Q[2,1])
+ 	Q[2,end]=0;
+
+		 #Relaxation
+		 Q=[exp(-(TR-TE)/T2) 0 0; 0 exp(-(TR-TE)/T2) 0; 0 0 exp(-(TR-TE)/T1)]*Q;
+	   Q[3,1]=Q[3,1]+(1-exp(-(TR-TE)/T1))
+
+		 if destroyMxy==1
+		 Q[1:2,:]=zeros(2,nTR);
+		 end
+		
+	end 
+  return S
+ end
+	
+	S0=spGRE(0,50,30*pi/180,0*pi/180,200,1000,1000,0)
+	S117=spGRE(0,50,30*pi/180,117*pi/180,200,1000,1000,0)
+	S120=spGRE(0,50,30*pi/180,120*pi/180,200,1000,1000,0)
+	Stheo=spGRE(0,50,30*pi/180,0*pi/180,200,1000,1000,1)
+	Sequation=sin(30*pi/180)*(1-exp(-50/1000))/(1-cos(30*pi/180)*exp(-50/1000))
+	fig_21=lines(abs.(S0),label="0°",axis=(xlabel="#TR",ylabel="Amplitude"))
+	lines!(abs.(S117),label="117°")
+	lines!(abs.(S120),label="120°")
+	lines!(abs.(Stheo),label="Destroyed transverse magnetization")
+	lines!(abs.(Sequation)*ones(size(Stheo)),linestyle=:dash,label="Theoretical equation")
+	axislegend()
+end
+
+# ╔═╡ c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
+md"""
+ Here is the signal amplitude for each spoiling increment from 0 to 180°. 
+"""
+
+# ╔═╡ aae4b539-45e9-4d78-86d5-9ff53770450a
+begin 
+Sig=zeros(ComplexF64,181)
+Ph=zeros(181)
+for k in 0:180
+
+	Stemp=spGRE(0,50,30*pi/180,k*pi/180,200,1000,1000,0)
+	Sig[k+1]=Stemp[end]
+	Ph[k+1]=k
+end
+fig_21b=lines(Ph,abs.(Sig),axis=(xlabel="#TR",ylabel="Amplitude"))
+lines!(abs.(Sequation)*ones(size(Stheo)),linestyle=:dash,label="Theoretical equation")
+fig_21b
+end
+
+# ╔═╡ 245aae0e-cba5-465f-a5b1-3443da3247f5
+md"""
+### 3.2.2 Balanced steady-state free precession 
+Instead of discarding the transverse magnetization, one can reuse it in order to maximize the signal to noise ratio. This is the concept of the bSSFP. Here is the sequence diagram of the bSSFP sequence: 
+![Fig5](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/bSSFP.png?raw=true)
+
+- No spoiler or RF spoiling is used. 
+- TE is half the TR.
+- The readout gradient (and all the others) is completely balanced. 
+"""
+
+# ╔═╡ 5da68585-bc48-4527-ac02-1787dd231adb
+begin
+
+ function bSSFP(TR,alpha,phi0,nTR,T1,T2,df)
+	 Q=zeros(ComplexF64,3,nTR)
+	 S=zeros(ComplexF64,nTR)
+  R=zeros(ComplexF64,3,3)
+	 Q[3,1]=1;
+	 phi=0;
+  for k in 0:nTR-1
+	   phi=phi+phi0;
+		 R=applyRF(alpha,phi)
+		 Q=R*Q;
+	  
+		 # Precession
+	   theta=2*pi*df*TR/2*0.001;
+	   P=[exp(im*theta) 0 0; 0 exp(-im*theta) 0; 0 0 1]
+	   Q=P*Q;
+	  
+		 # Relaxation 
+		 Q=[exp(-TR/2/T2) 0 0; 0 exp(-TR/2/T2) 0; 0 0 exp(-TR/2/T1)]*Q;
+	   Q[3,1]=Q[3,1]+(1-exp(-TR/2/T1))
+	
+		 S[k+1]=Q[1,1]*exp(-im*phi)
+
+	  	#Precession 
+	   Q=P*Q;
+	  
+		 #Relaxation
+		 Q=[exp(-(TR/2)/T2) 0 0; 0 exp(-(TR/2)/T2) 0; 0 0 exp(-(TR/2)/T1)]*Q;
+	   Q[3,1]=Q[3,1]+(1-exp(-(TR/2)/T1))
+		
+	end 
+  return S	
+ end
+S=bSSFP(10,30*pi/180,0,200,1000,100,0)
+fig_22a=lines(abs.(S),axis=(xlabel="#TR",ylabel="Amplitude"))
+nTR_22a=findfirst(abs.(diff(abs.(S))).<0.0001)
+print("Calculated")
+end
+
+
+# ╔═╡ d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
+begin
+
+	Sig_22b=zeros(ComplexF64,401)
+	for ind in 0:400
+		df=-200+ind
+		local S=bSSFP(10,30*pi/180,0,200,1000,100,df)
+		Sig_22b[ind+1]=S[end]
+	end
+	fig_22b=lines(-200:200,abs.(Sig_22b))
+	print("Computed")
+end
+
+# ╔═╡ 7afc5069-a10f-435a-8f1f-277821ff6b72
+md"""
+In the case of inhomogeneous B0, this translates into banding artefacts in the image. On-resonance regions will have almost no signal compared to the others. 
+![FigBandingArtefact](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Bandingartefact.png?raw=true)
+_Figure from Miller,2012, Neuroimage DOI:10.1016/j.neuroimage.2011.10.040_
+"""
+
+# ╔═╡ 6461f886-8fff-4e25-b44d-11f6259f7e69
+begin
+	fig_22c=Figure()
+	  ax=Axis(fig_22c[1,1],xlabel="df",ylabel="Amplitude")
+	for tr in 10:10:30
+	local Sig=zeros(ComplexF64,401)
+		for ind in 0:400
+			df=-200+ind
+			local S=bSSFP(tr,30*pi/180,0,200,1000,100,df)
+			Sig[ind+1]=S[end]
+		end
+	lines!(ax,-200:200,abs.(Sig),label="$tr ms")
+	end
+	axislegend()
+end
+
+# ╔═╡ 379d0bdd-f3bc-493d-b57a-b46f97b159f1
+begin
+	fig_22d=Figure()
+	  ax_22d=Axis(fig_22d[1,1],xlabel="df",ylabel="Amplitude")
+	for phi in 0:60:180
+	local Sig=zeros(ComplexF64,401)
+		for ind in 0:400
+			df=-200+ind
+			local S=bSSFP(10,30*pi/180,phi*pi/180,200,1000,100,df)
+			Sig[ind+1]=S[end]
+		end
+	lines!(ax_22d,-200:200,abs.(Sig),label="ϕ= $phi °")
+	end
+	axislegend()
+end
+
+# ╔═╡ 5eb70803-f9bd-4073-b990-0ea723d9cb45
+md"""
+
+### 3.3 Interim conclusion 
+
+The EPG framework is a powerful tool to simulate the MR signal. 
+In a couple of lines, it is easy to implement the basic MRI operators and simulate the most common sequences like multi-echo spin-echo, spoiled gradient echo and balanced steady-state sequences.
+
+Here are some interesting videos about these sequences: 
+"""
+
+
+# ╔═╡ 8e934f39-a170-4766-8f8b-50e9b559a67d
+YouTube("rp3rwuZlPyU")
+
+# ╔═╡ b4da11f5-b126-4bf8-8e4c-1d44ea22823c
+YouTube("6wAuxKf1GhQ")
+
+# ╔═╡ f797b917-7a76-443a-8154-3bc1b047f928
+YouTube("qrJ6GQAyuY0")
+
+# ╔═╡ 8faec62d-8380-4b2a-8440-2040e132e98c
+md"""
+ # Conclusion 
+The extended phase graph algorithm is a framework composed of $F_n$ and $Z_n$ basis representing many isochromats in a voxel 
+Events of a pulse sequence are simple operations on $F_n$ and $Z_n$. 
+The signal at any timee is $F_0$ as all others n states are dephased. 
+The matrix formulation allows easy implementation. Multiple impementations are already freely available.
+
+Coherence pathways diagram can also be used to better visualize formation of echoes. 
+
+In this course, we mentioned phenomena like excitation, relaxation, precession, gradient application. The flexibility of the EPG framework also enables the simulation of:
+- the diffusion effect  (Weigel,2015,JMRI, DOI:10.1002/jmri.24619)
+- multiple gradient directions and gradient amplitude (Weigel,2010,JMR, DOI:https://doi.org/10.1016/j.jmr.2010.05.011)
+- mutiple pool modelling (Malik, 2018,MRM DOI: 10.1002/mrm.27040)
+
 """
 
 # ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
@@ -810,8 +1151,10 @@ md"""
 # ╔═╡ 54e96133-f840-41ee-bac5-db8dc7c196f3
 begin
     hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]));
+    tip(text) = Markdown.MD(Markdown.Admonition("note", "Tip", [text]));
     note(text) = Markdown.MD(Markdown.Admonition("note", "note", [text]));
 	answer_blurred(text) = Markdown.MD(Markdown.Admonition("tip", "Answer", [text]));
+    important(text) = Markdown.MD(Markdown.Admonition("example", "Important", [text]));
 	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]));
     answer_folded(text) = @htl("""
     <details class="admonition info" style="background-color: #f1f8e9 !important; border-left-color: #2e7d32 !important; display: block; margin: 1em 0; padding: 0; border-left-style: solid; border-left-width: .4rem; border-radius: .2rem; box-shadow: 0 .2rem .5rem rgba(0,0,0,.05), 0 0 .05rem rgba(0,0,0,.1); overflow: hidden;">
@@ -825,365 +1168,597 @@ begin
     """)
 end
 
-# ╔═╡ c2f62d46-d6c7-45bf-a6fb-d8348f38e712
+# ╔═╡ 066f2d77-4a57-4396-a86a-9b5eed5e7896
 md"""
-Apply 2 consecutive relaxation operators with the 3x3 opertors and verify that you get the same results with the 4x4 operator. 
-	
-**Shows that you get the same results ?**
+**Q1** How could we represent this ? 
 """ |> question
 
-# ╔═╡ 43c65513-9db6-4ced-bea8-a41b2ce52c79
+# ╔═╡ 0c73051a-f356-4094-9250-2cb1cc72201d
 md"""
-We want to apply a first operation to ${M}_{0} = \begin{bmatrix} M_x \\ M_y \\ M_z \\ 1 \end{bmatrix}$  :
-	
-$$M_1 = A_1 M_0 + B_1$$
+Use a 3D plot to show the transverse magnetization $(M_{xy})$ of all isochromats. 
+One axis for $M_x$, a second one for $M_y$ and the last one represents the spatial direction within the voxel.
 
-then a second relaxation steps :
-$$M_2 = A_2 M_1 + B_2 = A_2 A_1 M_0 + A_2 B1 + B_2$$
+""" |> tip
 
-Now if we use the 4x4 it gives :
+# ╔═╡ 53bc8b12-8aa9-47f8-8749-0c7aebca433a
+md"""
+**Q2** Can you use the function _visuMxy_ to visualize the isochromats in that case? 
+""" |> question
 
-$$M_2 = A_2 A_1 M_0$$
+# ╔═╡ 43302385-ba8a-4e7b-9cff-2c5bf977d5b8
+md"""
+
+$$\begin{equation}
+
+M_{xy}(p) = \exp(i2\pi p) 
+\end{equation}$$
+
 """ |> hint
 
-# ╔═╡ 67483df1-8124-48f0-8336-632186abc9fa
+# ╔═╡ 1eb4b0bd-857a-4a94-ac67-67c598b721fa
 md"""
+Note that only $F_0$ will give signal as the other states will be completely dephased !
+"""|>important
 
-To prove that the $3 \times 3$ affine formulation ($A\vec{M} + B$) and the $4 \times 4$ homogeneous formulation are strictly equivalent after two consecutive steps, it is sufficient to expand the matrix product of the $4 \times 4$ method and project it onto the $3 \times 3$ space.
-
-Here is the step-by-step mathematical proof, written so it can be directly inserted into your notebook.
-
----
-
-**Proof of Equivalence**
-
-Let the augmented 4-dimensional magnetization vector be:
-
-$$\vec{M}_{4} = \begin{bmatrix} M_x \\ M_y \\ M_z \\ 1 \end{bmatrix} = \begin{bmatrix} \vec{M} \\ 1 \end{bmatrix}$$
-
-The $4 \times 4$ relaxation operator is structured from the $3 \times 3$ components ($A$) and the relaxation column vector ($B$) as a block matrix:
-
-$$A_{4 \times 4} = \begin{bmatrix}
-A & B \\
-\mathbf{0}^T & 1
-\end{bmatrix}$$
-
-Where $A = \begin{bmatrix} E_2 & 0 & 0 \\ 0 & E_2 & 0 \\ 0 & 0 & E_1 \end{bmatrix}$, $B = \begin{bmatrix} 0 \\ 0 \\ M_0(1-E_1) \end{bmatrix}$, and $\mathbf{0}^T = \begin{bmatrix} 0 & 0 & 0 \end{bmatrix}$.
-
-**1. Successive application with the $4 \times 4$ method**
-
-For two successive relaxation steps ($1$ then $2$), we multiply the matrix operators:
-
-$$\vec{M}_2 = A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} \cdot \vec{M}_0$$
-
-Let's compute the product of the two block matrices:
-
-$$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
-A_2 & B_2 \\
-\mathbf{0}^T & 1
-\end{bmatrix} \begin{bmatrix}
-A_1 & B_1 \\
-\mathbf{0}^T & 1
-\end{bmatrix} = \begin{bmatrix}
-A_2 A_1 + B_2 \mathbf{0}^T & A_2 B_1 + B_2 \cdot 1 \\
-\mathbf{0}^T A_1 + 1 \cdot \mathbf{0}^T & \mathbf{0}^T B_1 + 1 \cdot 1
-\end{bmatrix}$$
-
-Since $B_2 \mathbf{0}^T$ is a $3 \times 3$ zero matrix, the product simplifies beautifully to:
-
-$$A_{4\times4}^{(2)} \cdot A_{4\times4}^{(1)} = \begin{bmatrix}
-A_2 A_1 & A_2 B_1 + B_2 \\
-\mathbf{0}^T & 1
-\end{bmatrix}$$
-
-**2. Application to the initial vector**
-
-Applying this result to the initial augmented vector $\vec{M}_0$, we get:
-
-$$\vec{M}_2 = \begin{bmatrix}
-A_2 A_1 & A_2 B_1 + B_2 \\
-\mathbf{0}^T & 1
-\end{bmatrix} \begin{bmatrix} \vec{M}(0) \\ 1 \end{bmatrix} = \begin{bmatrix} (A_2 A_1)\vec{M}(0) + (A_2 B_1 + B_2)\cdot 1 \\ \mathbf{0}^T\vec{M}(0) + 1 \cdot 1 \end{bmatrix}$$
-
-$$\vec{M}_2 = \begin{bmatrix} A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2 \\ 1 \end{bmatrix}$$
-
-**Conclusion**
-
-The 3D component (the first 3 rows) of the final state vector explicitly yields:
-
-$$\vec{M}(2) = A_2 A_1 \vec{M}(0) + A_2 B_1 + B_2$$
-
-This result is **strictly identical** to the expression obtained with the standard $3 \times 3$ method expanded in your hint ($M_2 = A_2 A_1 M_0 + A_2 B_1 + B_2$).
-
-Therefore, the $4 \times 4$ formulation allows embedding the translation (the $B$ term related to $T_1$ recovery) directly into a single matrix multiplication, which is much more efficient for chaining events (RF, gradients, relaxation) within a Bloch simulator. 
- """ |> answer_folded
-
-# ╔═╡ 57809a43-2ff0-4758-b3f1-34a204b6fd07
+# ╔═╡ be57d254-3fe7-44a5-85df-7483f8f4854b
 md"""
-Suppose we excite an isochromat of spin to put all the initial magnetization along the Y axis -> $$\vec{M} =  \begin{bmatrix} 0 \\ M_0 \\ 0 \\ 1 \end{bmatrix}$$
+This visualization is equivalent to a more classic 2D view where the position would be only represented by the color and not the  axis. 
+"""|>note
 
-Assuming the isochromate has the following properties :
--  $T_1$ = 1000 ms  
--  $T_2$ = 50 ms
-
-**What will be the value of the magnetization vector after a 100 ms, 600 ms And after 5 secondes of recovery ?**
-
-Give a short interpretation of the value for the case 600 ms and 5 secondes.
+# ╔═╡ cd76a5df-6a9a-428e-af83-6d904c1b50b0
+md"""
+**Q3** What about the longitudinal magnetization ?
+Write a function similar to _visuMxy_ that generates a graph of the longitudinal components of the isochromats.  
 """ |> question
 
-# ╔═╡ 432cc64f-3324-45ec-b86f-0c862a70febd
+# ╔═╡ 1cfb4b83-7b50-449e-94d4-52e751ae4180
 md"""
-You can wrote the function to help you build the operator and perform the calculus :
 
-```julia
-function recovery(dt,T1,T2)
-		E1 = exp(-dt/T1)
-		E2 = exp(-dt/T2)
-		A = diagm([E2, E2, E1,1])
-		A[3,4] = 1-E1
-		A = zrot(phi,false)*A
-	return A
-end
-```
-""" |> hint
+Generally, we use a 3D plot even though a 2D plot would be sufficient as the longitudinal component is real. 
 
-# ╔═╡ 01a9ff7d-d6ab-48e7-aa42-e12921ced76b
+""" |> tip
+
+# ╔═╡ fdee56d8-22d4-40d1-b59d-3ea436effb7a
 md"""
-Using the following function :
-```julia
-function recovery(dt,T1,T2)
-	E1 = exp(-dt/T1)
-	E2 = exp(-dt/T2)
-	A = diagm([E2, E2, E1,1])
-	A[3,4] = 1-E1
-return A
-end
-
-M_0 = [0;1;0;1]; # initial magnetization after tilt along Y axis
-A = recovery(100.0,1000,50)
-M_1 = A * M_0;
-A = recovery(600.0,1000,50)
-M_2 = A * M_0;
-A = recovery(5000.0,1000,50)
-M_3 = A * M_0
-```
-			 
-For **dt = 100 ms** : $M =$ $(latexify_md(M_1))
-			 
-For **dt = 500 ms** : $M =$ $(latexify_md(M_2))
-
-For **dt = 5000 ms** :$M =$ $(latexify_md(M_3))
-
-**Interpretation**
-			 
-For 600 ms and 5s,  almost all the magnetization along the Y axis is gone )  due to the $T_2$ decays (dt > 5 * $T_2$).
-
-For dt = 5 s, the magnetization is almost back at the state where all the magnetization is along the $B_0$ axis because dt > 5 * $T_1$)
-""" |> answer_folded
-
-# ╔═╡ a564a238-d7b8-4e61-9827-920805e675bb
-md"""
-What happens if we apply a rotation along the Z-axis at the equilibrium M = [0,0,1,1] ?
+**Q4** Now let's consider some isochromats that have observed a combination of gradients and RF pulses, such that at the end 
+$$\begin{equation}
+M_z (p)= \cos(2\pi p) 
+\end{equation}$$ .
+Use the previous function to draw the Mz configuration? 
 """ |> question
 
-# ╔═╡ d59ad369-c95c-462d-90a3-2bf47780aed3
+# ╔═╡ 54b0044e-b662-4034-a844-6421b0a0af56
 md"""
-Nothing, you can verify with the code.
-""" |> answer_folded
 
-# ╔═╡ 0f03a903-fcd4-4a42-829b-e612f79bf6f1
+**Key concepts of EPG:**
+
+- Multiple states coexist at the same time.
+
+- At each time point, we can describe the whole population with a matrix $Q$ of coefficients representating the population of each state
+
+$$\begin{equation}
+Q = \begin{bmatrix}
+F_0^+ & F_1^+ & F_2^+ & \dots & F_N^+ \\
+F_0^- & F_1^- & F_2^- & \dots & F_N^- \\
+Z_0 & Z_1 & Z_2 & \dots & Z_N
+\end{bmatrix}
+\end{equation}$$
+
+- There is a direct relationship between $[M_{xy},M_z]$ and $[F_n,F_{-n},Z_n]$ based on the Fourier transform:
+
+$$\begin{equation}
+F_n^+=\int_0^1{M_{xy}(p)e^{-2\pi inp}dp}
+\end{equation}$$
+$$\begin{equation}
+F_n^-=\int_0^1{M_{xy}^*(p)e^{-2\pi inp}dp}
+\end{equation}$$
+$$\begin{equation}
+Z_n=\int_0^1{M_{z}(p)e^{-2\pi inp}dp}  
+\end{equation}$$
+
+- Inversely, we can recover $[M_{xy},M_z]$ from  $[F_n,F_{-n},Z_n]$:
+$$\begin{equation}
+M_{xy}(p)=F_0^+ + \sum_{n=1}^\infty{[F_n^+e^{2\pi i n p}+(F_n^-)^*e^{-2\pi i n p}]}
+\end{equation}$$
+$$\begin{equation}
+M_z(p)=Real\left(Z_0+2\sum_{n=1}^N Z_n e^{2i\pi n p}\right)
+\end{equation}$$
+
+- Note that $F^-_n=(F^+_{-n})^*$ and therefore $F^-_0=(F^+_0)^*$
+"""|> important
+
+
+# ╔═╡ 5ceb34a1-b95c-4bf8-aba2-71123881ee9b
 md"""
-What is the relation between the time step dt used in the recovery function and the angle along the z axis that we should apply ?
-""" |> question
-
-# ╔═╡ 9e19225b-fcea-43c4-ae5e-701d87e67396
-md"""
-The relation is between the off-resonance (in ms) and the angle in radiant is :
-			 
-$$\phi = 2 * \pi * \frac{df}{1000}$$
-
-The division by 1000 is used to convert in seconds.			 
-""" |> answer_folded
-
-# ╔═╡ 5265d9da-a2ae-4cda-be3b-ca7dc50de002
-md"""
-Simulate 2 free precession signal (corresponding to the signal evolution after a radiofrequency pulse of 90° around the X axis) and do it for 2 off-resonances value : 0 and 10 Hz.
-
-Plot the $M_x$, $M_y$ and $M_z$ for each time point :
-
-```
-- dt : 1 ms
-- Duration of simulation : 1000 ms
-- Off-resonance : 0 ou 10 Hz
-- T1 = 600 ms
-- T2 = 100 ms
-```
-
 	
-**You need to store the magnetization vector for time each step, you can initialie a vector with : `M = zeros(Float64,4,N)`**.
-
-""" |> question
-
-# ╔═╡ 8a82299c-822c-4b7a-9a38-004969977dbc
-md""""
-For the plot you can use the following code :
-
-```julia
-function plot_mag(M::Matrix{<:Real};title="",xlabel = "Time [ms]")
-	f=Figure()
-	ax = Axis(f[1,1],title=title)
-	lines!(ax,M[1,:],label = "Mx")
-	lines!(ax,M[2,:],label = "My")
-	lines!(ax,M[3,:],label = "Mz")
-	ax.xlabel= xlabel
-	ax.ylabel="Mangnetization [ms]"
-	axislegend()
-	return f,ax
-end
-```
+**Q5** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\exp(4\pi i p)$ ?
 	
-""" |> hint
+"""|>question
 
-# ╔═╡ ebd0f73a-5eda-4d8c-be35-4daefc7be84e
- md"""
- $(plot_magnetization(M_hz)[1])
- """ |> answer_folded
-
-# ╔═╡ fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
+# ╔═╡ 7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
 md"""
-For the rest of this notebook we will only use the rotation (xrot, yrot, zrot) and freeprecess function.
+Maybe try to vizualize it with _visuMxy_ ...
+And then look at the equations ...
+"""|>hint
 
-You can also use for the plot the function : 			
+# ╔═╡ 1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
+md"""
 	
-	plot_magnetization(M::Matrix{<:Real};title="")
+This configuration can be fully described by one coefficient : $$$F_2^+=1$$$
 	
-""" |> note
+"""|>answer_folded
 
-# ╔═╡ ab402fdd-e368-458f-afb0-ae0655c5dd50
+# ╔═╡ 3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
 md"""
-1. What is the value of the magnetization vector at TE after one RF excitation ? 
-
-2. What happen if you put an off-resonance df = 50 Hz?
-
-3. Repeat the same measure but this time use : $M_{xy} = \sqrt{M_x^2 + M_y^2}$ and explain what you obtain.
-""" |> question
-
-# ╔═╡ 802905c7-58cc-47f3-a68d-4230a8ebf242
-md"""
-You don't need to simulate every time point, you can apply :
 	
-1. excitation
-2. freeprecess during dt = TE
-3. freeprecess during dt = TR - TE
-4. loop to 1.
-""" |> hint
+**Q6** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\exp(4\pi i p)$ ?
+	
+"""|>question
 
-# ╔═╡ 41d4af71-17b4-462e-aeb2-fd416d646eac
+# ╔═╡ 44197ff8-f9ba-4b96-b80d-30cc3187a0c6
 md"""
-1. For df = 0 Hz : $M =$ $(latexify_md(M_ge_tr1_0hz))
-			 
-2. For df = 10 Hz : $M =$ $(latexify_md(M_ge_tr1_50hz))
-The signal for Mx and My are different, this is due to the off resonance.
-		 
-3. When we use the magnitude of the signal, we now obtain the same value : 
-			 
-$M =$ $(latexify_md(Mxy_tr1_50hz)) but we loose the phase information that might be important for some applications (flow encoding, MR thermometry, elastrography).
- """ |> answer_folded
+	
+This configuration can be fully described by one coefficient : $$$F_2^+=i$$$
+	
+"""|>answer_folded
 
-# ╔═╡ d69493bf-77a2-4512-be9c-da1332ba75e4
+# ╔═╡ e29d1009-e681-4ac7-8795-dd87b3cd29e3
 md"""
-1. Simulate the signal magnitude at TE for 10 TR. 
-2. Plot the results
-3. Do it with a larger and smaller flip angle
+Note that coefficients can be complex, which allows the configuration to be rotated by a given angle. 
+"""|>important
 
-**Give an interpretation about the results**
-""" |> question
-
-# ╔═╡ 8ff98244-b390-45f1-9b3c-875945da4550
+# ╔═╡ 44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
 md"""
-$(f2)
+	
+**Q7** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\exp(-4\pi i p)$ ?
+	
+"""|>question
 
-The magnitude of the signal reach a constant value after a few TR. 
-			 
- **The constant value of the magnetization vector is called the steady state.**
-
- The number of TR required to reach this state is dependant of the flip angle but also of other physical variable of the isochromat (T1,T2...)
-""" |> answer_folded
-
-# ╔═╡ 6f418850-5510-4c80-b7e2-07c6f7e6bfb4
+# ╔═╡ 4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
 md"""
-1. What is the Aeq operator for the spoiled gradient echo sequence ?
+	
+This configuration can be fully described by one coefficient : $F_2^-=1$
+	
+"""|>answer_folded
 
-2. Give the steady state value for the previous case and $\alpha = 60°$ and compare it to the analytical equation
-""" |> question
-
-# ╔═╡ abdb1a50-17d0-4cfb-87d4-227ea6577e14
+# ╔═╡ 84ce7725-9300-499c-bf2f-294587347720
 md"""
-Don't forget to add the spoiler
+	
+Note that $F^-_n$ and $F^+_n$ have the same number of "twists" but with opposite angle. 
+"""|>important
 
-The steady-state calculated by the analytical equation is MZss
-""" |> hint
-
-# ╔═╡ b302bd6d-4c84-407e-8f09-ccb117514877
+# ╔═╡ 72522850-f9d8-47bb-9f9f-05ff3e299e2f
 md"""
-$$Aeq = Spoil \  A_{tr} \ R_\alpha$$
+	
+**Q8** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\cos(2\pi p)$ ?
+	
+"""|>question
 
-And Mss = $(latexify_md(Mss))
-
-The Z component is equal to the analytical solution
-"""  |> answer_folded
-
-# ╔═╡ 6ac9e5f5-5a83-4348-82b9-1577aff52c90
+# ╔═╡ 8447240b-27a2-4df5-9366-2fad126a1651
 md"""
-If we want to obtain the steady state at TE (and not at TR) we need to write the equation starting at TE
+$cos(x)=(e^{ix}+e^{-ix})/2$
+"""|>hint
 
-$$M = A_{te}\ R_α \ \text{spoil} \ A_{tr-te} \ M_{TE}$$
-and solve this by writting $M = M_{TE} = M_{ss}$ at TE
-""" |> note
-
-# ╔═╡ 71f951f2-1d6c-4387-8aee-f619a886c79b
+# ╔═╡ c6842e09-7fba-45d0-b106-0864d0504c0e
 md"""
-The isochromat off-resonance choice should follow a **lorentzienne distrubion** and not a normal distribution.
+This configuration can be fully described by two coefficients : $F_1^+=0.5$ and $F_1^-=0.5$
+"""|>answer_folded
 
-This can be easily undestand because in the voxel we expects to see a decreasing exponential of signal due to the $T_2^*$
-""" |> note
-
-# ╔═╡ a29e232f-624d-48f1-a96f-d2c396b0dd32
+# ╔═╡ 0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
 md"""
-1. Can you tell what equation follow the green curves ?
-2. Can you explain where it comes from ?
-""" |> question
+	
+**Q9** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\cos(2\pi p)$ ?
+	
+"""|>question
 
-# ╔═╡ 5a0fc2b1-09ce-41b7-bfb9-cdae625067a3
+# ╔═╡ 4b77f7c2-ea87-4732-a967-58b2dabf6bfe
 md"""
- 1. The green curves follow the magnitude of a sinc function. 
- 2. This phenomenon is due to the fact that we observe a random choice of off-resonant isochromate +/- 15 Hz. With sufficient isochromate it should looks like a box function and it's Fourier transform is a sinc function.
-""" |> answer_folded
+This configuration can be fully described by two coefficients : $F_1^+=i$ and $F_1^-=-i/2$
+"""|>answer_folded
 
-# ╔═╡ 484d1abc-0b1c-46a4-95aa-0fed3e124db9
+# ╔═╡ 2307f7ec-b5bb-4bf4-807d-458b04b87e29
 md"""
-1. Explain what  happens at TE ?
+	
+**Q10** What are the EPG coefficients ($Z_n$) of this configuration of isochromats:$M_z(p) =\sin(2\pi p)$ ?
+	
+"""|>question
 
-2. What is the value of the maximum signal at TE ?
-""" |> question
+# ╔═╡ d7260975-4ba0-414e-8493-ecb35d674f9e
+md"""
+$e^x=\cos(x)+i\sin(x)$
+"""|>hint
 
-# ╔═╡ ce4ef0fe-7821-493c-8064-d82eb1fc34ff
+# ╔═╡ 2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
+md"""
+This configuration can be fully described by one coefficient : $Z_1=-i/2$
+"""|>answer_folded
+
+# ╔═╡ 44151964-9080-4975-a05f-de08a201df72
+md"""
+**Q11a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=0.5 e^{2\pi i p}$ and the longitudinal magnetization $M_z(p) =0.5$ ?
+"""|>question
+
+# ╔═╡ 0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
+md"""
+This configuration can be fully described by two coefficients : $Z_0=0.5$, $F^+_1=0.5$ 
+"""|>answer_folded
+
+# ╔═╡ 342d3039-4d5f-4493-af7b-fb83d31df08f
+md"""
+	 
+**Q11b** With a more classic representation in 3D with $M_x$, $M_y$ and $M_z$ for the three axes, how does this configuration look ? 
+	
+"""|>question
+
+# ╔═╡ 20ad0308-6775-4650-93ce-8fe5f66dc746
+md"""
+**Q11c** What would be the Q matrix of this particular configuration ? 
+"""|>question 
+
+# ╔═╡ 6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
+md"""
+$$\begin{equation}
+Q = \begin{bmatrix}
+0 & 0.5  \\
+0 & 0 \\
+0.5 & 0
+\end{bmatrix}
+\end{equation}$$
+
+"""|>answer_folded
+
+# ╔═╡ a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
+md"""
+**Q12a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=\cos(2\pi p)$ and the longitudinal magnetization $M_z(p) =\sin(2\pi p)$ ?
+"""|>question
+
+# ╔═╡ 6e3f40c6-de85-4536-8f1d-c714b58f8cdd
+md"""
+This configuration can be fully described by three coefficients : $$$Z_1=i/2$$$, $$$F^+_1=0.5$$$ and $$$F^-_1=0.5$$$
+"""|>answer_folded
+
+# ╔═╡ a6e7c563-0b40-4d0f-9f87-361c169501ab
+md"""
+**Q12b** What is the Q matrix of this configuration ? 
+"""|> question 
+
+# ╔═╡ cde32749-6600-4e36-bf16-21827e5fefb5
+md"""
+$$\begin{equation}
+Q = \begin{bmatrix}
+0 & 0.5  \\
+0 & 0.5 \\
+0 & i/2
+\end{bmatrix}
+\end{equation}$$
+
+"""|>answer_folded
+
+# ╔═╡ 816dfb87-d5c0-41e4-872e-e29319035047
+md"""
+**Q13** How does this configuration look ?
+$$\begin{equation}
+Q = \begin{bmatrix}
+0 & 0.8  \\
+0 & 0.2 \\
+0 & 0
+\end{bmatrix}
+\end{equation}$$
+
+"""|>question
+
+# ╔═╡ 71855601-5211-494a-a916-df606c4928c9
+md"""
+Write a function that converts a Q matrix to $[M_{xy},M_z]$.
+"""|>tip
+
+# ╔═╡ e9adf55b-0851-4c1b-a468-c1e42d0389b8
+md"""
+Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+ and the $F_1^-$ state of this configuration to be convinced !
+"""|>important
+
+# ╔═╡ a437b267-089e-48bf-85cf-a0288a99a294
+md"""
+ **Reminder:**
+ $$\begin{equation}
+\begin{bmatrix} 
+F_n^+ \\ 
+F_n^- \\ 
+Z_n 
+\end{bmatrix} = \int_{0}^{1} 
+\begin{bmatrix} 
+M_{xy}(z) \\ 
+M_{xy}^*(z) \\ 
+M_z(z) 
+\end{bmatrix} e^{-2\pi inz} dz
+\end{equation}$$
+
+"""|>important
+
+# ╔═╡ e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
+md"""
+**Q14** If the configuration state is 
+$Q=\begin{bmatrix}
+0.1 & 0 & 0.2i\\
+0.1 & 0.3 & 0  \\
+0 & 0.5i & 0
+\end{bmatrix}$
+just after the excitation
+and the off-resonance frequency of the object is $\delta\omega=50Hz$. 
+
+How does the distribution of the isochromat look at TE=0ms and TE=10ms (we neglect the relaxation) ?
+"""|>question
+
+# ╔═╡ 0c9e9709-0f08-42cf-8ebe-34fb924364a9
+md"""
+**Q15** What results from applying a unit gradient to $Q=\begin{bmatrix}
+0.5 & 0.25 & 0\\
+0.5 & 0.1i & 0  \\
+0 & 0.2i & 0
+\end{bmatrix}$ ?
+
+Plot the isochromats before and after the application of the gradients with the tools that help you the best to understand what is happening.
+	
+"""|>question
+
+# ╔═╡ 68921972-27a3-4e3b-a7fd-076d8eda1622
+md"""
+After applying the gradient, the configuration is $Q=\begin{bmatrix}
+-0.1i & 0.5 & 0.25\\
+0.1i & 0 & 0  \\
+0 & 0.2i & 0
+\end{bmatrix}$ ?
+""" |>answer_folded
+
+# ╔═╡ 70f9159c-0aa8-41f4-bea6-959e697ea3d1
+md"""
+**Q16** If the relaxation times are $T_1=100ms$ and $T_2=40ms$ andthe configuration state is $Q=\begin{bmatrix}
+-0.1i & 0.5 & 0.25\\
+0.1i & 0 & 0  \\
+0 & 0.2i & 0
+\end{bmatrix}$, how does the configuration change after $20ms$? 
+"""|>question
+
+
+# ╔═╡ 0415830d-0026-4392-8b0d-f699fe445cea
+md"""
+**Q17a** What is the rotation matrix of an excitation pulse of 90° along the x axis ? 
+"""|>question 
+
+# ╔═╡ 3698965a-6f37-4639-823f-cdc679d9dffb
+md"""
+Write a function that returns  the rotation matrix. 
+"""|>tip
+
+# ╔═╡ 37425a77-b7dc-406a-a563-20dd63ac5256
+md"""
+The rotation matrix is $R=\begin{bmatrix} 
+0.5 & 0.5 & -i \\
+0.5 & 0.5 & i \\
+-0.5i & 0.5i & 0
+\end{bmatrix}$
+
+"""|>answer_folded
+
+# ╔═╡ 9094e9ad-392c-454d-aa8c-25cd567d900e
+md"""
+**Q17b** what is the effect on this configuration matrix: 
+$Q=\begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$ ? What is the isochromat distribution? 
+"""|>question
+
+# ╔═╡ 53f01777-e928-4227-a290-27fd5b6c42b8
+md"""
+$Q=\begin{bmatrix}
+-i \\
+i\\
+0
+\end{bmatrix}$
+"""|>answer_folded
+
+# ╔═╡ ded0162b-4785-4b3f-8c2f-3b112bcf951d
+md"""
+**Q18a** Let's take an example where the initial configuration is $Q=\begin{bmatrix} 
+0 & 1 \\ 
+0 & 0  \\ 
+0 & 0 
+\end{bmatrix}$. 
+
+Without any calculation, what Q matrix is the result of the application of the 60° pulse ?
+
+**A**: $\begin{bmatrix}  0 & 0.75 & 0.25 \\ 0 & -0.25 & 0\\ 0.43 & 0 & -0.43  \end{bmatrix}$   
+    
+**B**: $\begin{bmatrix} 0.25 & 0 \\ 0.25 & -0.25 \\ 0 & -0.43 \end{bmatrix}$   
+
+**C**: $\begin{bmatrix} 0 & 0.75\\ 0 & -0.25 \\ 0 & -0.43 \end{bmatrix}$   
+    
+"""|>question
+
+# ╔═╡ 53eb7112-dcc0-4373-ad43-225e14b6b94b
+md"""
+The answer is **C**. 
+
+It can't be A or B because an RF pulse does not create new states. 
+
+"""|>answer_folded
+
+# ╔═╡ bccdb23f-057c-471b-8257-0851fdd9b853
+md"""
+**Q18b** How does the distribution of the isochromat look after the 60° pulse ? 
+    
+"""|>question
+
+# ╔═╡ b18a5a3c-49b5-4db4-9c3e-92622acb2178
+md"""
+**Q19** What is the effet of a 180° pulse on this configuration $Q=\begin{bmatrix} 0 & i \\ 0 & 0 \\ 0 & 0 \end{bmatrix}$   
+
+"""|>question
+
+# ╔═╡ f0f11355-abc5-4c3c-af7c-cffc781cb316
+md"""
+A perfect 180° pulse swaps $F_n^+$ and $F_n^-$ states. 
+"""|>answer_folded
+
+# ╔═╡ aae6009d-35d4-4b3d-95d5-c7071f7efd79
+md"""
+To sum up, phenomena and events of a classic MR pulse sequence easily translate into the EPG framework: 
+
+- **Precession**: multiplication by a diagonal rotation matrix 
+- **Gradient**: increase n of $F^+$ and decrease n of $F^-$
+- **RF pulse**: mix of coefficients from the same _n_ level
+- **Relaxation**: $T_2$ decay attenuates $F_n$ coefficients and $T_1$ attenuates $Z_n$ and enhances $Z_0$
+
+"""|>important
+
+# ╔═╡ a393c627-906d-4996-bbbd-cdf20c1db112
+md"""
+**Q20a**  If  $TE=20ms$, $T1=1000ms$ and $T2=100ms$, what is the amplitude of the first echo ? What is the isochromat distribution at TE ? 
+"""|>question
+
+# ╔═╡ 7d821ff3-fcd9-485d-8941-336745c0a35d
+md"""
+Write a code with the EPG functions previously implemented. 
+"""|>tip
+
+# ╔═╡ 822102cb-52e3-4184-b74d-283275f3a291
+md"""
+The magnitude of the first echo is $F_0^+=0.82$.
+"""|>answer_folded
+
+# ╔═╡ e520500b-036c-4d84-b15c-9163ec2783a6
+md"""
+**Q20b** What is the amplitude of all of the 32 echoes ? 
+"""|>question 
+
+# ╔═╡ 0f21e602-1779-45fc-ae8a-ae920f69e9fb
+md"""
+ Write a function that simulates a MESE sequence as it might be useful for the next questions.Refocussing flip angles and phase of the RF pulses should be arguments of the function.
+ In the function it might be interestsing to show the evolution of the Q matrix for each echo. 
+"""|>tip
+
+# ╔═╡ cdb77e2f-985b-454f-acf2-b42e5510966d
+md"""
+The amplitude of the echoes follows the T2 exponential decay 
+$fig_20b
+"""|>answer_folded
+
+# ╔═╡ 530aae7d-c72f-4bc9-928a-ec75b3866d64
+md"""
+**Q20c** What happens if the refocussing pulse is imperfect and only reaches 170° ? 
+"""|>question 
+
+# ╔═╡ fe896a03-f584-44bd-9109-edfa42e4bb28
+md"""
+With imperfect refocussing pulse the decay of the transverse component does not follow the exponential decay anymore. The resulting image willl be largely driveen by the B1 transmit field efficiency profile. This is also very problematic for quantitative MRI, when the objective is to estimate the T2 relaxation time. 
+$fig_20c
+"""|>answer_folded
+
+# ╔═╡ b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
+md"""
+**Q20d** Which small modification of the sequence can be done to reduce the error ? 
+"""|>question 
+
+# ╔═╡ 2d44ed1c-54b8-4bdf-a853-255e22466e53
+md"""
+1. Change the phase of the refocussing pulse 
+2. Look for the Carr‑Purcell‑Meiboom‑Gill condition 
+"""|>hint
+
+# ╔═╡ f60f56fd-af2c-4254-858e-13323742f12e
+md"""
+Changing the refocussing pulse axis to y helps recovering a decay very close to the  $T_2$ exponential decay. 
+$fig_20d
+"""|>answer_folded
+
+# ╔═╡ 6ccbe255-748e-4e5a-bb3d-68500d1838be
+md"""
+It's also possible to keep the refocussing pulse on the x axis but alternate the phase between $\pi$ and $0$ across echoes. Try if you need to be convinced ;-)  
+"""|>note
+
+# ╔═╡ dc71cc6e-2543-4b8d-a0dc-9832b64165ff
+md"""
+Which RF spoiling phase increment ($\phi_0$) yields a signal closest to the ideal theoretical model (where transverse magnetization is fully destroyed at each TR)?
+	
+**A**: $\phi_0=0°$
+	
+**B**: $\phi_0=117°$
+	
+**C**: $\phi_0=120°$
+"""|>question
+
+# ╔═╡ e6801c1c-93b4-4a7c-93b3-230d57ada2da
+md"""
+The answer is B: $\phi_0=117°$
+$fig_21
+This graph shows multiple important points: 
+	- multiple RF pulses are required to reach a steady state, regardless of the RF spoiling increment
+	- the theoretical equation matches the steady state of the simulation where the transverse magnetization is forced to be 0 at the end of the TR
+	- the signal can be really different if the RF spoiling increment is modified
+"""|>answer_folded
+
+# ╔═╡ fef04dea-83d3-4c96-9331-68d3fde6cfc0
+md"""
+In quantitative MRI, it is really important to take that effect into account. If the signal is not exactly the one predicted, the estimated T1 will be biased. 
+
+"""|>important
+
+# ╔═╡ 606f97b6-4693-44e8-bc76-34c656e1f047
+md"""
+**Q22** How many dummy cycles (number of TR) are required to reach the steady-state of the bSSFP sequence with $\alpha=30°$ and $TR=10ms$ when imaging an object with $T1=1000ms$ and $T2=100ms$. 
+
+"""|>question
+
+# ╔═╡ f93cfa73-67a0-4474-95c0-e468915c25bc
+md"""
+For this exercise, we consider the steady-state being reached when the difference between two consecutives TRs is less than 0.0001 (assuming $M_0=1$)
+"""|>tip
+
+# ╔═╡ fc389b75-5bae-4abf-ba58-b833d2d7ae08
+md"""
+	
+The number of TR required to reach the steady state is $nTR_22a
+$fig_22a
+	
+"""|>answer_folded
+
+# ╔═╡ 10498091-e583-442e-9ec4-b565a6cf61ce
+md"""
+**Q22b** How would the signal vary in the case of off-resonance frequency (from -200Hz to 200Hz)? 
+"""|>question 
+
+# ╔═╡ bb5bd06f-0b05-479a-8ce4-43d196876f62
+md"""
+	
+ The signal increases when changing off-resonance frequency. However it decreases again to its minimum at 100Hz and -100Hz. 
+ $fig_22b
+	
+"""|>answer_folded
+
+# ╔═╡ 4c29f5d6-db13-4111-ba6e-774a661b8692
+md"""
+**Q22c** Changing the TR or the phase of the RF pulse will have an impact. WIll that be a change of the distance between two dark band or a shift of all the the bands ? 
+"""|>question
+
+# ╔═╡ 4a4535d4-18cf-4132-929a-5f2deb6622b5
+md"""
+Increasing the TR reduces the distance between two bands. This distance is equal to 1/TR.
+
+$fig_22c
+
+"""|>answer_folded
+
+# ╔═╡ 680ec799-71a7-4cd7-b8a2-f213a7a747b8
+md"""
+**Q22d** What is the effect of linearly changing the phase of the RF pulse from TR to TR ? 
+
+"""|>question
+
+# ╔═╡ 9789f2b0-64bb-4852-8a42-0644be047d76
 md"""
 
-**1.**
-			 
-Between the 90°/180° (before TE/2) pulses the different isochromat dephase according to their different off-resonance value.
+All bands can be shifted by linearly increasing the phase of the RF pulse from TR to TR. 
+$fig_22d
 
-The 180° RF pulse rotate them around the Y axis which means that the phase they accumulate $Φ$ is then reversed to $-Φ$.
-
-During the 180 and TE the dephasing still occurs and bring all the spin in phase. **It is a Spin Echo**
-
-**2.**	
-
-The signal decrease we observed at TE is only due to the $T_2$ effect :
-			 
-			 $$S(TE) = M_0 \exp{-\frac{TE}{T2}}$$
-"""  |> answer_folded
+"""|>answer_folded
 
 # ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
 html"""
@@ -1234,7 +1809,7 @@ ShortCodes = "~0.4.2"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.5"
+julia_version = "1.12.6"
 manifest_format = "2.0"
 project_hash = "dafa1c5dbb36807224c4efad756cfc706ba0f06e"
 
@@ -1593,9 +2168,9 @@ version = "2.2.9"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "c307cd83373868391f3ac30b41530bc5d5d05d08"
+git-tree-sha1 = "e6c4a6407a949e79a9d3f249bf49e6987c80e01f"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.8.1+0"
+version = "2.8.2+0"
 
 [[deps.FFMPEG_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "PCRE2_jll", "Zlib_jll", "libaom_jll", "libass_jll", "libfdk_aac_jll", "libva_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
@@ -1611,9 +2186,9 @@ version = "0.3.1"
 
 [[deps.FileIO]]
 deps = ["Pkg", "Requires", "UUIDs"]
-git-tree-sha1 = "8e9c059d6857607253e837730dbf780b6b151acd"
+git-tree-sha1 = "6621fef488e496356c9c9625d0562c12a6070819"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-version = "1.19.0"
+version = "1.20.0"
 
     [deps.FileIO.extensions]
     HTTPExt = "HTTP"
@@ -1878,9 +2453,9 @@ version = "0.16.3"
 
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm", "CoreMath", "MacroTools", "OpenBLASConsistentFPCSR_jll", "Printf", "Random", "RoundingEmulator"]
-git-tree-sha1 = "921d7e91687e15a2c7c269c226960491fc041832"
+git-tree-sha1 = "c3ee408ae340565f41699e3a3fa1053698c7626e"
 uuid = "d1acc4aa-44c8-5952-acd4-ba5d80a2a253"
-version = "1.0.9"
+version = "1.0.10"
 
     [deps.IntervalArithmetic.extensions]
     IntervalArithmeticArblibExt = "Arblib"
@@ -2003,9 +2578,9 @@ version = "4.1.0+0"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "eb62a3deb62fc6d8822c0c4bef73e4412419c5d8"
+git-tree-sha1 = "b7970cef8ae1c990ba0c09cd8bdc1145e006632f"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
-version = "18.1.8+0"
+version = "22.1.7+0"
 
 [[deps.LaTeXStrings]]
 git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
@@ -2090,9 +2665,9 @@ version = "2.42.0+0"
 
 [[deps.Libtiff_jll]]
 deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "XZ_jll", "Zlib_jll", "Zstd_jll"]
-git-tree-sha1 = "f04133fe05eff1667d2054c53d59f9122383fe05"
+git-tree-sha1 = "aebd334d06cee9f24cea70bd19a39749daf73881"
 uuid = "89763e89-9b03-5906-acba-b20f662cd828"
-version = "4.7.2+0"
+version = "4.7.3+0"
 
 [[deps.Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2239,9 +2814,9 @@ version = "1.3.6+0"
 
 [[deps.OpenBLASConsistentFPCSR_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "3287ec88df50429a934ebc6cf14606215e27b987"
+git-tree-sha1 = "dafdaa3ff15f20ff703d909d3a6f574a5b0586f3"
 uuid = "6cdc7f73-28fd-5e50-80fb-958a8875b1af"
-version = "0.3.33+0"
+version = "0.3.33+1"
 
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
@@ -3035,76 +3610,175 @@ version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─0ddea6dc-2f55-439b-86f6-dfd85ba429b6
 # ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
-# ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
+# ╟─0b95dfa8-8528-4b18-864e-7b65058e05e0
+# ╟─c33b213e-7656-11f1-a001-f39f9cc685b2
 # ╟─95e43cd5-9266-4eff-ad38-ab2393985ffd
 # ╟─9fd5b724-4634-4fd9-b397-bc1e8161394d
 # ╟─c3d72b3f-1467-46fa-a964-387c625fcd2f
 # ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
-# ╟─c2f62d46-d6c7-45bf-a6fb-d8348f38e712
-# ╟─43c65513-9db6-4ced-bea8-a41b2ce52c79
-# ╟─67483df1-8124-48f0-8336-632186abc9fa
-# ╟─57809a43-2ff0-4758-b3f1-34a204b6fd07
-# ╟─432cc64f-3324-45ec-b86f-0c862a70febd
-# ╟─35cc0ff7-14f7-4144-a1f0-5483c05e8732
-# ╟─01a9ff7d-d6ab-48e7-aa42-e12921ced76b
-# ╟─3a33ef9b-5948-4270-8c86-941a340a8029
-# ╟─3b5c3b6d-15a6-42c7-bae7-2e7a100cd1de
-# ╟─f3d04f2e-1c49-4abd-9fe2-6667dd5233b9
-# ╠═638256aa-ef09-4afe-92ee-4ac9939a0f5d
-# ╟─ec03551b-649c-4f33-9ccf-315f4f18968b
-# ╠═93df9818-a58b-4118-a612-7887d2aff92f
-# ╠═c3091f3d-cde9-4a25-a7c5-a3790f9eaf90
-# ╟─a564a238-d7b8-4e61-9827-920805e675bb
-# ╟─d59ad369-c95c-462d-90a3-2bf47780aed3
-# ╟─c3876124-7c0a-4442-a8fa-ee51f144cc9e
-# ╟─0f03a903-fcd4-4a42-829b-e612f79bf6f1
-# ╟─9e19225b-fcea-43c4-ae5e-701d87e67396
-# ╟─f8648cfe-01a9-4dff-a5ce-e980ef80a74e
-# ╟─fdd6c0dc-cba1-4b30-9f85-8e6f7057d971
-# ╠═dff72c32-7972-4c7b-95f0-834b1615bcb7
-# ╟─fc021473-d9cf-48d8-aa2a-fb84579c50b2
-# ╟─5265d9da-a2ae-4cda-be3b-ca7dc50de002
-# ╟─8a82299c-822c-4b7a-9a38-004969977dbc
-# ╟─34dffba7-b26b-4754-9687-e102cb414771
-# ╟─1f7826fc-dcb0-421f-b4e4-48833da4d36f
-# ╠═6cbba238-3bec-42a8-ac99-2c85647dc249
-# ╟─ebd0f73a-5eda-4d8c-be35-4daefc7be84e
-# ╟─fd1cb0fe-f32c-4e44-8160-1c0a7b4a1d2b
-# ╟─dcad004e-6399-43fe-a02f-4109af02de30
-# ╟─3671f3e4-0556-4453-83cb-e718fa294241
-# ╟─ab402fdd-e368-458f-afb0-ae0655c5dd50
-# ╟─802905c7-58cc-47f3-a68d-4230a8ebf242
-# ╟─f199d95f-5656-4646-a774-a38bba6ceb68
-# ╟─41d4af71-17b4-462e-aeb2-fd416d646eac
-# ╟─d69493bf-77a2-4512-be9c-da1332ba75e4
-# ╟─2a4fbac6-7da9-4719-84c0-75b2242b2ca4
-# ╟─8ff98244-b390-45f1-9b3c-875945da4550
-# ╟─a421da06-8174-4852-9a94-b1f96c0a9b88
-# ╠═d50f4ef4-a9e3-4cfa-949c-4533fc274652
-# ╟─4b860561-2dc1-4890-bbaf-1a7f02819d6e
-# ╟─1f22c623-f4ae-476c-9456-c7479c902759
-# ╟─6f418850-5510-4c80-b7e2-07c6f7e6bfb4
-# ╟─abdb1a50-17d0-4cfb-87d4-227ea6577e14
-# ╟─7654ace2-29e8-4d2c-8f01-90506b621961
-# ╟─b302bd6d-4c84-407e-8f09-ccb117514877
-# ╟─6ac9e5f5-5a83-4348-82b9-1577aff52c90
-# ╟─9ac7a675-d0bb-4609-90df-d7fe20826481
-# ╠═a1eff48a-b734-4022-b72f-f9b220c36767
-# ╟─10f0b86b-b9be-417c-ac13-adb5d00e52de
-# ╟─eada765f-eb05-4c75-bf8d-65c87f751e65
-# ╟─a1f81c82-a99d-4281-8cf8-ed6ebc06627c
-# ╟─71f951f2-1d6c-4387-8aee-f619a886c79b
-# ╟─981a3171-eb26-4198-a0c6-14bcab0612f4
-# ╟─a29e232f-624d-48f1-a96f-d2c396b0dd32
-# ╟─5a0fc2b1-09ce-41b7-bfb9-cdae625067a3
-# ╟─9294ee6b-04f0-4bdf-a150-dfadff80222e
-# ╟─484d1abc-0b1c-46a4-95aa-0fed3e124db9
-# ╟─ce4ef0fe-7821-493c-8064-d82eb1fc34ff
+# ╟─066f2d77-4a57-4396-a86a-9b5eed5e7896
+# ╟─0c73051a-f356-4094-9250-2cb1cc72201d
+# ╟─feb49760-e9de-4738-82cb-d2fa9c8b1376
+# ╟─4cecb481-e70f-4ed6-8a16-90ba400eed97
+# ╟─53bc8b12-8aa9-47f8-8749-0c7aebca433a
+# ╟─43302385-ba8a-4e7b-9cff-2c5bf977d5b8
+# ╟─7d096023-f932-481a-a3b1-8c290a77dd0c
+# ╟─090d5994-6e13-4178-b0ab-ef62e1e0258d
+# ╟─1eb4b0bd-857a-4a94-ac67-67c598b721fa
+# ╟─be57d254-3fe7-44a5-85df-7483f8f4854b
+# ╟─f0697055-ac59-4906-925c-c25233d85bae
+# ╟─e0b63072-46d2-4cf1-9e86-68658977f438
+# ╟─cd76a5df-6a9a-428e-af83-6d904c1b50b0
+# ╟─1cfb4b83-7b50-449e-94d4-52e751ae4180
+# ╟─3c9b9f6f-f117-4513-8a82-8bafcaacee64
+# ╟─fdee56d8-22d4-40d1-b59d-3ea436effb7a
+# ╟─53b7ae7e-6e93-43a9-9826-9da197ee8ff3
+# ╟─209e3560-56d0-4f97-8d47-d2fb30c6a145
+# ╟─8a41e907-2d6e-4fba-b750-bde13f044ed7
+# ╟─54b0044e-b662-4034-a844-6421b0a0af56
+# ╟─cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
+# ╟─07bfc15b-24c8-44e4-932f-6e19d8eab264
+# ╟─5ceb34a1-b95c-4bf8-aba2-71123881ee9b
+# ╟─7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
+# ╟─bbd683cb-db0c-492c-abc6-bfe16a727d00
+# ╠═1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
+# ╟─3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
+# ╟─e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
+# ╟─44197ff8-f9ba-4b96-b80d-30cc3187a0c6
+# ╟─e29d1009-e681-4ac7-8795-dd87b3cd29e3
+# ╟─44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
+# ╟─65a77af2-de1e-4514-8d74-197c58553be9
+# ╟─4884bf8f-7ec7-41f3-bd3a-01f9dadc8169
+# ╟─84ce7725-9300-499c-bf2f-294587347720
+# ╟─72522850-f9d8-47bb-9f9f-05ff3e299e2f
+# ╟─2144b3dc-4f9d-4cea-b170-c12d069be630
+# ╟─8447240b-27a2-4df5-9366-2fad126a1651
+# ╟─c6842e09-7fba-45d0-b106-0864d0504c0e
+# ╟─0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
+# ╟─402e1e83-6f39-4951-84e1-022395cf9abc
+# ╟─4b77f7c2-ea87-4732-a967-58b2dabf6bfe
+# ╟─2307f7ec-b5bb-4bf4-807d-458b04b87e29
+# ╟─ff888489-f7c5-4267-bdfa-0779b4c9bd47
+# ╟─d7260975-4ba0-414e-8493-ecb35d674f9e
+# ╟─2dd28ac9-9fd1-49b0-92dc-c4598d53bb17
+# ╟─44151964-9080-4975-a05f-de08a201df72
+# ╟─0fb76dd5-916c-451d-af0c-8de825615a9d
+# ╟─782ecb14-1383-4051-a94a-11667afb98ea
+# ╟─0ee1c83f-d1dc-4544-a73a-4fdd44a1c6fa
+# ╟─342d3039-4d5f-4493-af7b-fb83d31df08f
+# ╟─9ca8976b-6ed4-4670-ab53-a1c65f0a628a
+# ╟─b7d18ce7-56ee-4924-8142-83e0cbfae698
+# ╟─20ad0308-6775-4650-93ce-8fe5f66dc746
+# ╟─6bfb709a-197a-4cb7-b1c8-8ce3e4e86b9d
+# ╟─a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
+# ╟─9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
+# ╠═b8839df7-50e7-4f68-b159-f5d59da124bc
+# ╟─f8e8eb72-5587-4a4c-8d3d-9d405a495d08
+# ╟─6e3f40c6-de85-4536-8f1d-c714b58f8cdd
+# ╟─a6e7c563-0b40-4d0f-9f87-361c169501ab
+# ╟─cde32749-6600-4e36-bf16-21827e5fefb5
+# ╟─816dfb87-d5c0-41e4-872e-e29319035047
+# ╟─71855601-5211-494a-a916-df606c4928c9
+# ╟─2e2a2750-fa16-437b-b313-6b20e966e814
+# ╟─218882cc-1ad4-4e50-9b01-5909435d56fc
+# ╟─35da0ef0-74a3-423e-922d-e24abddea5bf
+# ╟─e9adf55b-0851-4c1b-a468-c1e42d0389b8
+# ╟─a989690f-1da0-4330-9ec2-c93dc12e5fe0
+# ╟─4fdb3843-36d4-47e2-9961-2bf24d3c8a8b
 # ╟─34f5d1f9-3add-44d8-ad05-4acb08921d82
+# ╟─07344fa6-7082-4cf9-a0ac-1c6230d967c2
+# ╟─8add0d61-2a42-49e4-927a-c0b1132503f5
+# ╟─a437b267-089e-48bf-85cf-a0288a99a294
+# ╟─63cb3219-59e0-4413-bb0a-ab65a0217a84
+# ╟─e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
+# ╟─0beeee18-bca7-4dc7-94b1-30058a36085b
+# ╟─be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
+# ╟─a8a706b8-5063-4997-b454-2cc915a1d3ed
+# ╟─0c9e9709-0f08-42cf-8ebe-34fb924364a9
+# ╟─68921972-27a3-4e3b-a7fd-076d8eda1622
+# ╟─0e0a39ed-d409-427f-b67a-4050d3a73810
+# ╟─41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
+# ╟─39933e22-95f5-4167-b8c6-9b1ee5a06d77
+# ╟─e3fa2fc9-443f-4590-bfc2-32c346c70b4d
+# ╟─70f9159c-0aa8-41f4-bea6-959e697ea3d1
+# ╟─349e6d5c-664a-4905-94fe-51f1f4690298
+# ╟─88d5304a-5578-473a-aae9-bc1b733bc8f3
+# ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
+# ╟─0415830d-0026-4392-8b0d-f699fe445cea
+# ╟─3698965a-6f37-4639-823f-cdc679d9dffb
+# ╟─0bbfc3dc-0e4b-498f-a966-50d46d31956f
+# ╟─37425a77-b7dc-406a-a563-20dd63ac5256
+# ╟─9094e9ad-392c-454d-aa8c-25cd567d900e
+# ╟─53f01777-e928-4227-a290-27fd5b6c42b8
+# ╟─5e4d9226-cc07-4acc-80e2-765966ec0656
+# ╟─ded0162b-4785-4b3f-8c2f-3b112bcf951d
+# ╟─53eb7112-dcc0-4373-ad43-225e14b6b94b
+# ╟─bccdb23f-057c-471b-8257-0851fdd9b853
+# ╟─4b629172-2340-4dab-a73a-0aabbea61011
+# ╟─3bc9286d-84d7-48cd-83dd-63499cd362e8
+# ╟─09a37845-57a0-4e05-a8f9-061cc77a5b44
+# ╟─34270e18-f966-49bb-9a0c-d39272ecbd43
+# ╟─caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
+# ╟─1baac32b-9472-48e4-bcd9-19bf34735784
+# ╟─74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
+# ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
+# ╟─065491a5-e39b-431d-ad8e-42fcda40f34b
+# ╟─0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+# ╟─f0f11355-abc5-4c3c-af7c-cffc781cb316
+# ╟─055cf6ac-2855-4f29-acbb-583d9a415d82
+# ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
+# ╟─5a11e3bb-1309-4689-9d2a-7d9e85765abb
+# ╟─c33841ff-c67a-49ca-bcef-d05a5ac3d842
+# ╟─a393c627-906d-4996-bbbd-cdf20c1db112
+# ╟─7d821ff3-fcd9-485d-8941-336745c0a35d
+# ╟─b107650b-490a-47a6-8b0a-1d096ea910a7
+# ╟─822102cb-52e3-4184-b74d-283275f3a291
+# ╟─e520500b-036c-4d84-b15c-9163ec2783a6
+# ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
+# ╟─ef758214-468f-4ba4-bb53-646f9eed6811
+# ╟─06d3f755-6c85-425d-930f-16ec0a6334a5
+# ╟─cdb77e2f-985b-454f-acf2-b42e5510966d
+# ╟─530aae7d-c72f-4bc9-928a-ec75b3866d64
+# ╟─177660e1-4cb8-477b-acda-17ee3183925c
+# ╟─ec937014-e1eb-4908-ab42-04ed0cbb2a33
+# ╟─fe896a03-f584-44bd-9109-edfa42e4bb28
+# ╟─b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
+# ╟─2d44ed1c-54b8-4bdf-a853-255e22466e53
+# ╟─5473b416-7492-48a4-bdbd-c863c9f67d12
+# ╟─56bd4920-6be3-40c1-8256-ee2c2ab9da77
+# ╟─f60f56fd-af2c-4254-858e-13323742f12e
+# ╟─6ccbe255-748e-4e5a-bb3d-68500d1838be
+# ╟─0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+# ╟─89458e61-c069-439e-a5bb-bc007d842af1
+# ╟─dc71cc6e-2543-4b8d-a0dc-9832b64165ff
+# ╟─7695bd99-7dd4-4453-83b3-82883cedebe0
+# ╟─e6801c1c-93b4-4a7c-93b3-230d57ada2da
+# ╟─c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
+# ╟─aae4b539-45e9-4d78-86d5-9ff53770450a
+# ╟─fef04dea-83d3-4c96-9331-68d3fde6cfc0
+# ╟─245aae0e-cba5-465f-a5b1-3443da3247f5
+# ╟─606f97b6-4693-44e8-bc76-34c656e1f047
+# ╟─f93cfa73-67a0-4474-95c0-e468915c25bc
+# ╟─5da68585-bc48-4527-ac02-1787dd231adb
+# ╟─fc389b75-5bae-4abf-ba58-b833d2d7ae08
+# ╟─10498091-e583-442e-9ec4-b565a6cf61ce
+# ╟─d1c8035a-ba45-4c8f-a0d8-98b669b2ff84
+# ╟─bb5bd06f-0b05-479a-8ce4-43d196876f62
+# ╟─7afc5069-a10f-435a-8f1f-277821ff6b72
+# ╟─4c29f5d6-db13-4111-ba6e-774a661b8692
+# ╟─6461f886-8fff-4e25-b44d-11f6259f7e69
+# ╟─4a4535d4-18cf-4132-929a-5f2deb6622b5
+# ╟─680ec799-71a7-4cd7-b8a2-f213a7a747b8
+# ╟─379d0bdd-f3bc-493d-b57a-b46f97b159f1
+# ╟─9789f2b0-64bb-4852-8a42-0644be047d76
+# ╟─5eb70803-f9bd-4073-b990-0ea723d9cb45
+# ╟─8e934f39-a170-4766-8f8b-50e9b559a67d
+# ╟─b4da11f5-b126-4bf8-8e4c-1d44ea22823c
+# ╟─f797b917-7a76-443a-8154-3bc1b047f928
+# ╟─8faec62d-8380-4b2a-8440-2040e132e98c
 # ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
-# ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
+# ╟─54e96133-f840-41ee-bac5-db8dc7c196f3
 # ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
