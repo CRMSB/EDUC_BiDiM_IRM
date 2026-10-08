@@ -572,7 +572,7 @@ end
 
 # ╔═╡ 0a2d3298-6c32-4c3d-a141-bd8c7a38655c
 md"""
-It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherrence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
+It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
 
 ![Fig2](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig2.png?raw=true)
 
@@ -910,7 +910,7 @@ Write a function that converts a Q matrix to $[M_{xy},M_z]$.
 
 # ╔═╡ e9adf55b-0851-4c1b-a468-c1e42d0389b8
 md"""
-Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+ and the $F_1^-$ state of this configuration to be convinced !
+Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+$ and the $F_1^-$ state of this configuration to be convinced !
 """|>important
 
 # ╔═╡ a437b267-089e-48bf-85cf-a0288a99a294
@@ -1013,11 +1013,6 @@ md"""
 
 """|>question
 
-# ╔═╡ f0f11355-abc5-4c3c-af7c-cffc781cb316
-md"""
-A perfect 180° pulse swaps $F_n^+$ and $F_n^-$ states. 
-"""|>answer_folded
-
 # ╔═╡ aae6009d-35d4-4b3d-95d5-c7071f7efd79
 md"""
 To sum up, phenomena and events of a classic MR pulse sequence easily translate into the EPG framework: 
@@ -1038,11 +1033,6 @@ md"""
 md"""
 Write a code with the EPG functions previously implemented. 
 """|>tip
-
-# ╔═╡ 822102cb-52e3-4184-b74d-283275f3a291
-md"""
-The magnitude of the first echo is $F_0^+=0.82$.
-"""|>answer_folded
 
 # ╔═╡ e520500b-036c-4d84-b15c-9163ec2783a6
 md"""
@@ -3028,7 +3018,7 @@ version = "1.13.0+0"
 # ╟─a8a706b8-5063-4997-b454-2cc915a1d3ed
 # ╟─0c9e9709-0f08-42cf-8ebe-34fb924364a9
 # ╟─e3fa2fc9-443f-4590-bfc2-32c346c70b4d
-# ╠═70f9159c-0aa8-41f4-bea6-959e697ea3d1
+# ╟─70f9159c-0aa8-41f4-bea6-959e697ea3d1
 # ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
 # ╟─0415830d-0026-4392-8b0d-f699fe445cea
 # ╟─3698965a-6f37-4639-823f-cdc679d9dffb
@@ -3039,15 +3029,13 @@ version = "1.13.0+0"
 # ╟─4b629172-2340-4dab-a73a-0aabbea61011
 # ╟─34270e18-f966-49bb-9a0c-d39272ecbd43
 # ╟─1baac32b-9472-48e4-bcd9-19bf34735784
-# ╠═b18a5a3c-49b5-4db4-9c3e-92622acb2178
-# ╟─f0f11355-abc5-4c3c-af7c-cffc781cb316
+# ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
 # ╟─055cf6ac-2855-4f29-acbb-583d9a415d82
 # ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
-# ╠═5a11e3bb-1309-4689-9d2a-7d9e85765abb
+# ╟─5a11e3bb-1309-4689-9d2a-7d9e85765abb
 # ╟─c33841ff-c67a-49ca-bcef-d05a5ac3d842
 # ╟─a393c627-906d-4996-bbbd-cdf20c1db112
-# ╠═7d821ff3-fcd9-485d-8941-336745c0a35d
-# ╟─822102cb-52e3-4184-b74d-283275f3a291
+# ╟─7d821ff3-fcd9-485d-8941-336745c0a35d
 # ╟─e520500b-036c-4d84-b15c-9163ec2783a6
 # ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
 # ╟─bb5d8129-8f07-40a8-8527-26bb53ab7d3f
@@ -3061,7 +3049,7 @@ version = "1.13.0+0"
 # ╟─c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
 # ╟─fef04dea-83d3-4c96-9331-68d3fde6cfc0
 # ╟─245aae0e-cba5-465f-a5b1-3443da3247f5
-# ╠═606f97b6-4693-44e8-bc76-34c656e1f047
+# ╟─606f97b6-4693-44e8-bc76-34c656e1f047
 # ╟─f93cfa73-67a0-4474-95c0-e468915c25bc
 # ╟─10498091-e583-442e-9ec4-b565a6cf61ce
 # ╟─7afc5069-a10f-435a-8f1f-277821ff6b72
