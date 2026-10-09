@@ -143,7 +143,7 @@ begin
       N=25 # number of isochromats
       
       # transverse magnetization 
-	     ax=Axis(f[1,1],title = "Transverse ",xlabel="Mx",ylabel="My")
+	     ax=Axis(f[1,1],aspect = DataAspect(),title = "Transverse ",xlabel="Mx",ylabel="My")
 	  
       pos=LinRange(0,1,N)
       xs=zeros(length(pos))
@@ -600,15 +600,20 @@ begin
 		-im/2*exp(-im*phi)*sin(alpha) im/2*exp(im*phi)*sin(alpha) cos(alpha)]
 	return R
 end
+	R_17=applyRF(pi/2,0)
+	
+end
+
+# ╔═╡ cae2b6e4-e87d-4fc2-95e7-5da01801f4f8
+begin
+	Q_17=[0;0;1]
+	Q_17_after=R_17*Q_17
 end
 
 # ╔═╡ 5e4d9226-cc07-4acc-80e2-765966ec0656
 begin 
-	Q_17b=[0;0;1]
-	R_17b=applyRF(pi/2,0)
-	Q_17b=R_17b*Q_17b
-	Mxy_17b,Mz_17b=fromFtoM(Q_17b)
-	visuClassic(Mxy_17b,Mz_17b)
+	Mxy_17,Mz_17=fromFtoM(Q_17_after)
+	visuClassic(Mxy_17,Mz_17)
 end
 
 # ╔═╡ 4b629172-2340-4dab-a73a-0aabbea61011
@@ -884,7 +889,7 @@ end
 
 # ╔═╡ 0a2d3298-6c32-4c3d-a141-bd8c7a38655c
 md"""
-It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherrence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
+It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
 
 ![Fig2](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig2.png?raw=true)
 
@@ -897,7 +902,7 @@ Now let's look at the case where refocussing pulses are imperfect.
 **Interpretation**: 
 - The primary echo pathway (in red) still exists, but other pathways also contribute to the echo formation. 
 - Blue pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse leaves $F_1+$ not empty. The second crusher moves this residual population to $F_2^+$. The following cusher moves this population to $F_3^+$. A part of this population is then moved to $F_3^-$ by the following refocussing pulse. Three crushers later, this populations moves back to $F_0$ to contribute to the third echo. 
-- Green pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse moves a part of thi spopulation into $Z_1$. This sub-population stays there until the next refocussing pulse, which moves a part of this state into $F_1^-$. The following crusher moves this residual population into $F_0$ to contribute to the second echo. This is callled a **stimulated echo**. 
+- Green pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse moves a part of this population into $Z_1$. This sub-population stays there until the next refocussing pulse, which moves a part of this state into $F_1^-$. The following crusher moves this residual population into $F_0$ to contribute to the second echo. This is callled a **stimulated echo**. 
 
 """
 
@@ -918,12 +923,13 @@ In theory, if we completely destroy the transverse magnetization at the end of e
 $\begin{equation} S = \rho \frac{1 - e^{-TR/T1}}{1 - \cos(\alpha) e^{-TR/T1}} \sin(\alpha) \end{equation}$
 
 Two spoiling techniques are employed to limit the contribution of the transverse component across excitations: 
-- Gradient spoiling: Rephasing and spoiling are merged together to impose a \$2\pi\$ dephasing at the end of the TR. 
+- Gradient spoiling: Rephasing and spoiling are merged together to impose a $2\pi$ dephasing at the end of the TR. 
 - RF spoiling: the phase of the RF pulse is constantly changing from TR to TR such as $\phi(n)=(\phi_0/2)(n+1)n$
 
 Here is the pulse sequence diagram of the spoiled gradient echo. 
 ![Fig4](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/spoiledGRE.png?raw=true)
 
+Note that the crusher is merged with the rephasing gradient for efficiency.
 """
 
 
@@ -1190,7 +1196,7 @@ md"""
 
 $$\begin{equation}
 
-M_{xy}(p) = \exp(i2\pi p) 
+M_{xy}(d) = \exp(i2\pi d) 
 \end{equation}$$
 
 """ |> hint
@@ -1414,7 +1420,7 @@ md"""
 
 # ╔═╡ 6e3f40c6-de85-4536-8f1d-c714b58f8cdd
 md"""
-This configuration can be fully described by three coefficients : $$$Z_1=i/2$$$, $$$F^+_1=0.5$$$ and $$$F^-_1=0.5$$$
+This configuration can be fully described by three coefficients : $$$Z_1=-i/2$$$, $$$F^+_1=0.5$$$ and $$$F^-_1=0.5$$$
 """|>answer_folded
 
 # ╔═╡ a6e7c563-0b40-4d0f-9f87-361c169501ab
@@ -1428,7 +1434,7 @@ $$\begin{equation}
 Q = \begin{bmatrix}
 0 & 0.5  \\
 0 & 0.5 \\
-0 & i/2
+0 & -i/2
 \end{bmatrix}
 \end{equation}$$
 
@@ -1454,7 +1460,7 @@ Write a function that converts a Q matrix to $[M_{xy},M_z]$.
 
 # ╔═╡ e9adf55b-0851-4c1b-a468-c1e42d0389b8
 md"""
-Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+ and the $F_1^-$ state of this configuration to be convinced !
+Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+$ and the $F_1^-$ state of this configuration to be convinced !
 """|>important
 
 # ╔═╡ a437b267-089e-48bf-85cf-a0288a99a294
@@ -1619,6 +1625,11 @@ md"""
 Write a code with the EPG functions previously implemented. 
 """|>tip
 
+# ╔═╡ e845867a-d65e-40c7-bb01-4ea0929b8806
+md"""
+Remember that only the $F_0$ state provides signal.
+"""|>hint
+
 # ╔═╡ 822102cb-52e3-4184-b74d-283275f3a291
 md"""
 The magnitude of the first echo is $F_0^+=0.82$.
@@ -1632,7 +1643,7 @@ md"""
 # ╔═╡ 0f21e602-1779-45fc-ae8a-ae920f69e9fb
 md"""
  Write a function that simulates a MESE sequence as it might be useful for the next questions.Refocussing flip angles and phase of the RF pulses should be arguments of the function.
- In the function it might be interestsing to show the evolution of the Q matrix for each echo. 
+ In the function it might be interesting to show the evolution of the Q matrix for each echo. 
 """|>tip
 
 # ╔═╡ cdb77e2f-985b-454f-acf2-b42e5510966d
@@ -1648,7 +1659,7 @@ md"""
 
 # ╔═╡ fe896a03-f584-44bd-9109-edfa42e4bb28
 md"""
-With imperfect refocussing pulse the decay of the transverse component does not follow the exponential decay anymore. The resulting image willl be largely driveen by the B1 transmit field efficiency profile. This is also very problematic for quantitative MRI, when the objective is to estimate the T2 relaxation time. 
+With imperfect refocussing pulse the decay of the transverse component does not follow the exponential decay anymore. The resulting image will be largely driven by the B1 transmit field efficiency profile. This is also very problematic for quantitative MRI, when the objective is to estimate the T2 relaxation time. 
 $fig_20c
 """|>answer_folded
 
@@ -3627,7 +3638,7 @@ version = "1.13.0+0"
 # ╟─090d5994-6e13-4178-b0ab-ef62e1e0258d
 # ╟─1eb4b0bd-857a-4a94-ac67-67c598b721fa
 # ╟─be57d254-3fe7-44a5-85df-7483f8f4854b
-# ╟─f0697055-ac59-4906-925c-c25233d85bae
+# ╠═f0697055-ac59-4906-925c-c25233d85bae
 # ╟─e0b63072-46d2-4cf1-9e86-68658977f438
 # ╟─cd76a5df-6a9a-428e-af83-6d904c1b50b0
 # ╟─1cfb4b83-7b50-449e-94d4-52e751ae4180
@@ -3642,7 +3653,7 @@ version = "1.13.0+0"
 # ╟─5ceb34a1-b95c-4bf8-aba2-71123881ee9b
 # ╟─7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
 # ╟─bbd683cb-db0c-492c-abc6-bfe16a727d00
-# ╠═1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
+# ╟─1ced2c71-8b0a-4b4c-b6c5-74cd5ee6e25b
 # ╟─3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
 # ╟─e2109dc6-06b6-4cc3-9b13-dfa0ec7c2d5a
 # ╟─44197ff8-f9ba-4b96-b80d-30cc3187a0c6
@@ -3675,7 +3686,7 @@ version = "1.13.0+0"
 # ╟─9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
 # ╠═b8839df7-50e7-4f68-b159-f5d59da124bc
 # ╟─f8e8eb72-5587-4a4c-8d3d-9d405a495d08
-# ╟─6e3f40c6-de85-4536-8f1d-c714b58f8cdd
+# ╠═6e3f40c6-de85-4536-8f1d-c714b58f8cdd
 # ╟─a6e7c563-0b40-4d0f-9f87-361c169501ab
 # ╟─cde32749-6600-4e36-bf16-21827e5fefb5
 # ╟─816dfb87-d5c0-41e4-872e-e29319035047
@@ -3707,9 +3718,10 @@ version = "1.13.0+0"
 # ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
 # ╟─0415830d-0026-4392-8b0d-f699fe445cea
 # ╟─3698965a-6f37-4639-823f-cdc679d9dffb
-# ╟─0bbfc3dc-0e4b-498f-a966-50d46d31956f
+# ╠═0bbfc3dc-0e4b-498f-a966-50d46d31956f
 # ╟─37425a77-b7dc-406a-a563-20dd63ac5256
 # ╟─9094e9ad-392c-454d-aa8c-25cd567d900e
+# ╟─cae2b6e4-e87d-4fc2-95e7-5da01801f4f8
 # ╟─53f01777-e928-4227-a290-27fd5b6c42b8
 # ╟─5e4d9226-cc07-4acc-80e2-765966ec0656
 # ╟─ded0162b-4785-4b3f-8c2f-3b112bcf951d
@@ -3732,7 +3744,8 @@ version = "1.13.0+0"
 # ╟─c33841ff-c67a-49ca-bcef-d05a5ac3d842
 # ╟─a393c627-906d-4996-bbbd-cdf20c1db112
 # ╟─7d821ff3-fcd9-485d-8941-336745c0a35d
-# ╟─b107650b-490a-47a6-8b0a-1d096ea910a7
+# ╠═b107650b-490a-47a6-8b0a-1d096ea910a7
+# ╟─e845867a-d65e-40c7-bb01-4ea0929b8806
 # ╟─822102cb-52e3-4184-b74d-283275f3a291
 # ╟─e520500b-036c-4d84-b15c-9163ec2783a6
 # ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
@@ -3749,8 +3762,8 @@ version = "1.13.0+0"
 # ╟─56bd4920-6be3-40c1-8256-ee2c2ab9da77
 # ╟─f60f56fd-af2c-4254-858e-13323742f12e
 # ╟─6ccbe255-748e-4e5a-bb3d-68500d1838be
-# ╟─0a2d3298-6c32-4c3d-a141-bd8c7a38655c
-# ╟─89458e61-c069-439e-a5bb-bc007d842af1
+# ╠═0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+# ╠═89458e61-c069-439e-a5bb-bc007d842af1
 # ╟─dc71cc6e-2543-4b8d-a0dc-9832b64165ff
 # ╟─7695bd99-7dd4-4453-83b3-82883cedebe0
 # ╟─e6801c1c-93b4-4a7c-93b3-230d57ada2da
