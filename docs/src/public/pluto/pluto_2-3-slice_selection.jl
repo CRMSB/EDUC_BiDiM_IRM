@@ -39,6 +39,9 @@ begin
 	PlutoUI.TableOfContents()
 end
 
+# ╔═╡ 626993e8-9759-48af-a110-57a694cebe4b
+ChooseDisplayMode()
+
 # ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
 html"""
 	<h1 style="text-align:center">
@@ -56,9 +59,6 @@ html"""
 		</p>
 	</div>
 """
-
-# ╔═╡ 626993e8-9759-48af-a110-57a694cebe4b
-ChooseDisplayMode()
 
 # ╔═╡ b50b352b-e1ef-45ae-992f-51adcc1f2da8
 md"""
@@ -168,7 +168,7 @@ A RF pulse is characterized by its:
 
 ### Amplitude (B₁(t))
 
-The strength of the RF magnetic field, usually measured in microtesla ($\mu\text{T}$). Its peak value and overall envelope shape dictate how much torque is exerted on the net magnetization vector.
+The amplitude correspond to the strength of the RF magnetic field, usually measured in microtesla ($\mu\text{T}$). Its peak value and overall envelope shape dictate how much torque is exerted on the net magnetization vector.
 
 For non-adiabatic pulse, the flip angle (in radian) can be calculated as :
 
@@ -211,6 +211,7 @@ $$\text{TBP} = T \cdot \Delta f$$
 
 
 **Important :** Due to the non linearity of the bloch equation, you should simulate the effect in order to get the correct FWHM value.
+
 ---
 
 > **Keep in mind that these are approximations!**
@@ -579,14 +580,15 @@ For Trf = 0.196 ms, **FWHM ≈ $(round(1.21/0.196e-3,digits = 0)) Hz**
 md"""
 ## Bloch simulation : RF + slice selective gradient
 
-In order to simulate the slice profile, we need will simulate the magnetization in the x/y plane obtained after applying the RF at each frequency (corresponding to a dedicated spatial position in conjonction to the application of the slice selective gradient).
+In order to simulate the slice profile, we need to simulate the magnetization in the x/y plane obtained after applying the RF at each frequency (corresponding to a dedicated spatial position when the slice selective gradient is applied).
 
 For each position, we apply consecutively :
 1. A rotation operator around xy axis corresponding to the rf envelopped : `Mtmp = throt(rf[t],pi/2) * Mtmp`
 2. The relaxation operator : `Mtmp = freeprecess(dt,1.5,0.1,0.0) * Mtmp`
 3. A rotation operator around z axis for different **freq** `Mtmp = zrot(2*pi*freq*dt) * Mtmp`
-4. A rotation operator around z axis for different **freq** `Mtmp = zrot(2*pi*freq*dt) * Mtmp`
-5. After that the rotation operator around z axis for different **freq** `Mtmp = zrot(-2*pi*freq*dt) * Mtmp` is applied with a negative polarity and half the duration.
+4. Repeat step 1 for the next time-step.
+
+After simulating the effect of the RF pulse, we need to rephase the magnetization using the rotation operator around z axis for different **freq** `Mtmp = zrot(-2*pi*freq*dt) * Mtmp` is applied with a negative polarity and half the duration.
 """
 
 # ╔═╡ 9d4529d5-9547-428a-ad3c-af3c7a65c859
@@ -690,14 +692,14 @@ The excitation bandwidth $\Delta f$ (typically measured as Full Width at Half Ma
 
 $$\Delta f = \frac{\text{TBWP}}{T}$$
 
-and that the TBWP product of a SINC pulse is given by the number of zero-crossing on the right and left side :
+The TBWP product of a SINC pulse is given by the number of zero-crossing on the right and left side :
 
 $$TBWP = T  \Delta f = N_L + N_R$$ 
 """
 
 # ╔═╡ f498d8d7-0793-4df5-91f1-3709c4b9b1ce
 md"""
-You might see a discrepency in your code between the text book (like the "Handbook of MRI Pulse sequence") and the code.
+You might see a discrepency in your code between text books (like the "Handbook of MRI Pulse sequence") and the code.
 Most of the sinc function integrates the term **$\pi$** directly in the function :
 	
 $$\text{sinc}(t) = \frac{sin(\pi t)}{\pi t}$$
@@ -965,7 +967,7 @@ This is done under a specific domain where rotation are performed with 2x2 unita
 
 In `SU(2)`
 
-The SLR regression is quite complex and we won'but the idea is to use represent the rotation  propagate back the  rotation (SU(2)) in order to propagate ba the nutation of the magnetization due to RF waveform and the precession provoked by the slice gradient.
+The idea is to use a representation in the SU(2) domain in order to propagate back the nutation of the magnetization due to RF waveform and the precession provoked by the slice gradient.
 
 
 ---
@@ -989,7 +991,7 @@ md"""
 
 Here is the minimal example using the Parks-McClellan (remez) algorithm from DSP.jl to generate $B(z)$ polynomial coefficients and evaluate the resulting profile.
 
-To prevent the scaling issues from DSP.remez, we use the optimal transition width formula slr_transition_measure from Pauly et al. to set the band edges and apply passband normalization.
+To prevent the scaling issues from DSP.remez, we use the optimal transition width formula slr\_transition\_measure from Pauly et al. to set the band edges and apply passband normalization.
 
 """
 
@@ -1394,7 +1396,7 @@ $$\left\vert{} \frac{d\psi}{dt} \right\vert{} \ll \gamma \Vert{}\vec{B}_{\text{e
 
 where $d\psi/dt$ is the angular velocity of $\vec{B}_{\text{eff}}$ and $\gamma \Vert{}\vec{B}_{\text{eff}}\Vert{}$ is the instantaneous nutation frequency of the spins around $\vec{B}_{\text{eff}}$. 
 
-Physically, this condition dictates that the rotation of the effective field must be substantially slower than the precession of magnetization around it.
+Physically, this condition dictates that the rotation of the effective field must be substantially slower than the precession of magnetization around it ($\omega_{\text{eff}} = γ B_{\text{eff}}$)
 
 As long as this threshold is met, the final flip angle depends solely on the trajectory of $\vec{B}_{\text{eff}}$ and becomes immune to spatial $B_1$ inhomogeneities .
 """
@@ -2026,13 +2028,13 @@ We use a phase of π/2 for the flip angle operator : `Mtmp = throt(rf[t],pi/2) *
 
 # ╔═╡ 080c56cb-ea2f-49cc-81ef-8a62107fbafb
 md"""
-- The phase π/2 will perform a rotation along the Y axis which tilt the magnetization along the X axis.
+- The phase π/2 will perform a rotation along the Y axis which tilt the magnetization along the X axis. The real part shows the amplitude along this axis (and imaginary part along Y axis).
 - A 180° pulse is an inversion rf pulse. In order to see the effect we need to plot the Mz component (here : M[3])
 """ |> answer_blurred
 
 # ╔═╡ 54ddbf15-98b1-49cd-99f2-04196bc76ff6
 md"""
-- Can you explain the difference in slice selectivity between the 2 pulses ?
+- Between the 2 slice profile we changed increase the TBW from 2 to 8. Can you explain the difference in slice selectivity between the 2 pulses (using the TBW definition) ? 
 - Edit the parameter of this function in order to get the same slice : 
 	seq ,M2,z2 = koma_script(alpha = 30/180*pi, Trf = 3e-3,hamming=false,tbw = 2.0,Gz = 5e-3)
 - After fixing the slice selectivity, do you observe something else ?
@@ -5024,9 +5026,9 @@ version = "1.13.0+0"
 # ╟─0c2a6e9b-79e4-4f25-9917-edabbf811611
 # ╟─501e1529-ec9b-4d42-8cd6-c8a4a1f79674
 # ╟─2bfc3f08-5668-458c-9561-84427f34e509
-# ╠═51a21488-e2fd-4d60-8167-aa7e3784e023
+# ╟─51a21488-e2fd-4d60-8167-aa7e3784e023
 # ╟─b32ba2bc-42d1-4e1d-9c43-cdb387b43199
-# ╟─9d4529d5-9547-428a-ad3c-af3c7a65c859
+# ╠═9d4529d5-9547-428a-ad3c-af3c7a65c859
 # ╟─54a9ab35-0a25-4bcd-9175-669319076c7c
 # ╟─4315054c-11b2-45dd-9b0f-d03d000501fd
 # ╟─02ea7895-6d0e-4eb4-8950-67e7dcca801a
@@ -5036,7 +5038,7 @@ version = "1.13.0+0"
 # ╟─f498d8d7-0793-4df5-91f1-3709c4b9b1ce
 # ╠═b116f4bc-f21b-4015-92a1-2e8007902116
 # ╟─bb028db2-0c59-4d1f-a819-9debe2a199d6
-# ╟─b63c272f-30c9-4963-a465-60062bc73005
+# ╠═b63c272f-30c9-4963-a465-60062bc73005
 # ╟─8561d8d7-5ffc-4065-aaf8-353b83c27228
 # ╟─54ddbf15-98b1-49cd-99f2-04196bc76ff6
 # ╟─0e6e2c37-af8b-46d6-a069-b59ee7391449
@@ -5056,7 +5058,7 @@ version = "1.13.0+0"
 # ╟─1f794004-1796-4692-ada0-0096a693782a
 # ╟─66d7c892-8406-4c0e-8cde-90334d2b997a
 # ╟─89c422cd-4e3d-40b9-abc3-666cdde649ed
-# ╟─91fabae4-b0e5-4c93-800d-9050a93889e8
+# ╠═91fabae4-b0e5-4c93-800d-9050a93889e8
 # ╟─abfbc789-ca8d-4d94-ba3f-463e2d89a7b0
 # ╟─c9f11338-622c-466d-8da6-77482ebdcc1c
 # ╟─af940e86-96ba-4539-8f61-7d01b4ba9499
