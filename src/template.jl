@@ -1,8 +1,20 @@
 ### A Pluto.jl notebook ###
-# v1.0.3
+# v0.20.28
 
 using Markdown
 using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
 
 # ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
 begin
@@ -121,6 +133,16 @@ and $M2 =$ $(latexify_md(M2))
 
 """
 
+# ╔═╡ 0b5297d5-8c1d-43ce-a02f-9b08a18c7242
+md"""
+## Create a Slider
+"""
+
+# ╔═╡ 0a1345b7-686a-44e3-a65b-c0628218d587
+md"""
+Coil : $(@bind coil PlutoUI.Slider(1:6, default=1, show_value=true))
+"""
+
 # ╔═╡ c165f3e2-2874-4330-ae1b-22ec87fc5f1e
 md"""
 
@@ -189,6 +211,45 @@ begin
 end
 ```
 """
+
+# ╔═╡ 46dca3db-66b4-4075-9560-2264d043b34e
+md"""
+# How to handle variable scope
+
+In pluto, you can't define the same variable in 2 different cells, because it is a reactive notebook
+"""
+
+# ╔═╡ 5a3c1cd6-f483-443d-9072-37f9a68cdba3
+md"""
+If you use a cell surounded by let...end, it will create a specific scope
+"""
+
+# ╔═╡ 3878d47e-dcc9-4971-b3ad-a53c07e21fde
+let
+	e = 1
+	println(e)
+end
+
+# ╔═╡ f8c9af70-2ff1-4b72-9ce3-0856604f6347
+let
+	e = 3
+	println(e)
+end
+
+# ╔═╡ 945f0e30-e386-43b7-86b3-d55a01731d9c
+md"""
+you can also define function like
+"""
+
+# ╔═╡ 65c2a271-89b1-4675-8249-aafd4419db3d
+begin
+	function test()
+		b = 3
+	end
+
+	test()
+
+end
 
 # ╔═╡ 0bcea9e9-326d-45d8-92f3-177d54fd9a8b
 md"""
@@ -282,6 +343,18 @@ html"""
   }
 </style>
 """
+
+# ╔═╡ f3e7f29b-f14b-4404-b5f1-b85c9b7b7053
+begin
+	b = 1
+	c = b+1
+end
+
+# ╔═╡ 3b0aa64f-42e4-49e8-969a-20da9da2e4ed
+begin
+	b = 2+1
+	d = 3 + b
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2117,7 +2190,17 @@ version = "1.13.0+0"
 # ╠═3768a13e-fc29-425b-8108-706fc1bcad28
 # ╠═46331e75-b895-44c5-8a8d-5e74dd5c96a8
 # ╟─b92a6fc9-0dbe-4f3a-bd8f-e16b940ba5d8
+# ╟─0b5297d5-8c1d-43ce-a02f-9b08a18c7242
+# ╠═0a1345b7-686a-44e3-a65b-c0628218d587
 # ╠═c165f3e2-2874-4330-ae1b-22ec87fc5f1e
+# ╟─46dca3db-66b4-4075-9560-2264d043b34e
+# ╠═f3e7f29b-f14b-4404-b5f1-b85c9b7b7053
+# ╠═3b0aa64f-42e4-49e8-969a-20da9da2e4ed
+# ╟─5a3c1cd6-f483-443d-9072-37f9a68cdba3
+# ╠═3878d47e-dcc9-4971-b3ad-a53c07e21fde
+# ╠═f8c9af70-2ff1-4b72-9ce3-0856604f6347
+# ╟─945f0e30-e386-43b7-86b3-d55a01731d9c
+# ╠═65c2a271-89b1-4675-8249-aafd4419db3d
 # ╟─0bcea9e9-326d-45d8-92f3-177d54fd9a8b
 # ╠═3df2208b-d44d-41ad-928d-324c5b15123a
 # ╠═acef4058-7370-4d28-8528-a4f566784e3f
