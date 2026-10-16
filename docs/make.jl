@@ -18,6 +18,8 @@ makedocs(;
         "NMR/MRI simulation" => ["Bloch equation" => "2-1-bloch_equation.md",
                                     "EPG" => "2-2-EPG.md",
                                     "Slice Selection" => "2-3-slice_selection.md",],
+        "MRI Reconstruction" => ["Basic Reconstruction" => "3-1-basic_reconstruction.md",
+                                    "Advanced Reconstruction" => "3-2-advanced_reconstruction.md"],
         ],
 )
 
