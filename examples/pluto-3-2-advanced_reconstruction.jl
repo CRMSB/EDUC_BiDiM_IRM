@@ -86,11 +86,11 @@ md"""
 The file contains `kspace_8ch` (complex k-space of each coil, $N_x \times N_y \times N_c$) and `map_8ch` (the sensitivity maps). As in the basic practical, we assume a pixel size of 1 mm × 1 mm.
 
 !!! warning "Path to the data"
-    The file `kspace_brain_8ch.mat` is expected in `ressources/EDUC_k-space-main/data/`. Change `data_path` below if you stored it somewhere else.
+    The file `kspace_brain_8ch.mat` is expected in `ressources/data/`. Change `data_path` below if you stored it somewhere else.
 """
 
 # ╔═╡ 54da8ce4-c93c-11f1-aeb0-75a99f4e362d
-data_path = joinpath(@__DIR__, "..", "ressources", "EDUC_k-space-main", "data", "kspace_brain_8ch.mat")
+data_path = joinpath(@__DIR__, "..", "ressources", "data", "kspace_brain_8ch.mat")
 
 # ╔═╡ 54da8cf0-c93c-11f1-8dbe-e57c9d2fde44
 begin

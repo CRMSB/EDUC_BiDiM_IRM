@@ -96,11 +96,11 @@ The dataset is a 2D axial brain slice acquired with an **8-channel head coil**. 
 - `map_8ch`: the sensitivity map of each coil (same size)
 
 !!! warning "Path to the data"
-    The file `kspace_brain_8ch.mat` is expected in `ressources/EDUC_k-space-main/data/`. Change `data_path` below if you stored it somewhere else.
+    The file `kspace_brain_8ch.mat` is expected in `ressources/data/`. Change `data_path` below if you stored it somewhere else.
 """
 
 # ╔═╡ ce8577a2-c939-11f1-a52f-4f78ed5cd323
-data_path = joinpath(@__DIR__, "..", "ressources", "EDUC_k-space-main", "data", "kspace_brain_8ch.mat")
+data_path = joinpath(@__DIR__, "..", "ressources", "data", "kspace_brain_8ch.mat")
 
 # ╔═╡ ce8577ac-c939-11f1-9e03-513f5cbe81e4
 begin
