@@ -11,7 +11,8 @@ begin
 	using PlutoUI: Slider   # GLMakie also exports a `Slider`
 	using PlutoTeachingTools
 	using HypertextLiteral
-
+	using ShortCodes
+	
 	# Plot
 	using GLMakie
 
@@ -725,6 +726,7 @@ PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
+ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
@@ -739,6 +741,7 @@ NFFTTools = "~0.3.0"
 PlutoTeachingTools = "~0.4.7"
 PlutoUI = "~0.7.83"
 Rotations = "~1.7.1"
+ShortCodes = "~0.4.2"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -747,7 +750,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "06d5ed5993b040ffcb9e4a76f803bfff836aab0b"
+project_hash = "c9ae5bd5d1ca7bc6771c0ee1be17dfbb90f628f3"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2299,6 +2302,18 @@ deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 version = "1.11.0"
 
+[[deps.ShortCodes]]
+deps = ["Base64", "CodecZlib", "Downloads", "JSON", "LinearAlgebra", "Memoize", "URIs", "UUIDs"]
+git-tree-sha1 = "d79fb381c591540288499e7a63a24f37d2f150bc"
+uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+version = "0.4.2"
+
+    [deps.ShortCodes.extensions]
+    QRCodersExt = "QRCoders"
+
+    [deps.ShortCodes.weakdeps]
+    QRCoders = "f42e9828-16f3-11ed-2883-9126170b272d"
+
 [[deps.SignedDistanceFields]]
 deps = ["Statistics"]
 git-tree-sha1 = "3949ad92e1c9d2ff0cd4a1317d5ecbba682f4b92"
@@ -2895,7 +2910,7 @@ version = "1.13.0+0"
 # ╟─ce857734-c939-11f1-a910-9de016fca185
 # ╠═ce857766-c939-11f1-a743-c7bd01aef4da
 # ╠═ce857782-c939-11f1-b207-a90fed7c07e9
-# ╠═3a7a738d-129b-41a4-9a44-c9bdfcd3e180
+# ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
 # ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
 # ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
 # ╟─ce8577b6-c939-11f1-8693-11da8d5aab7f
