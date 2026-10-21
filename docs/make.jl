@@ -20,6 +20,7 @@ makedocs(;
                                     "Slice Selection" => "2-3-slice_selection.md",],
         "MRI Reconstruction" => ["Basic Reconstruction" => "3-1-basic_reconstruction.md",
                                     "Advanced Reconstruction" => "3-2-advanced_reconstruction.md"],
+        "Sequence programming" => ["Pulseq - Basics" => "4-1-pulseq_basic.md"],
         ],
 )
 
