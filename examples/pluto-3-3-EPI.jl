@@ -43,7 +43,7 @@ html"""
 	</h1>
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 5-1: Echo-Planar Imaging reconstruction 
+			Lesson 3-3: Echo-Planar Imaging reconstruction 
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
 			Nadège Corbin
@@ -2744,48 +2744,48 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─ce848b7e-c939-11f1-b0e6-0b6babc5505a
-# ╠═ce857734-c939-11f1-a910-9de016fca185
-# ╠═ce857766-c939-11f1-a743-c7bd01aef4da
-# ╠═ce857782-c939-11f1-b207-a90fed7c07e9
+# ╟─ce857734-c939-11f1-a910-9de016fca185
+# ╟─ce857766-c939-11f1-a743-c7bd01aef4da
+# ╟─ce857782-c939-11f1-b207-a90fed7c07e9
 # ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
 # ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
 # ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
-# ╠═980f206f-6858-45ba-a30e-cc1322659880
-# ╠═dbe8291f-7953-4715-b904-e1d9a1b2885a
-# ╠═2d732e16-13a0-4340-895f-abe772b65351
+# ╟─980f206f-6858-45ba-a30e-cc1322659880
+# ╟─dbe8291f-7953-4715-b904-e1d9a1b2885a
+# ╟─2d732e16-13a0-4340-895f-abe772b65351
 # ╟─cb906961-654c-440b-932d-a633845e60ce
 # ╟─08cb95fd-7573-47ea-b190-9ee88c539120
 # ╟─effa3f96-7bc8-424f-b63f-8493f8ea6778
-# ╠═d5e3cece-f2c9-48c0-9e2c-a5c2f6a17e11
-# ╠═5741f2bc-f93d-4868-b814-6dfdaa1d27e4
-# ╠═c51cb563-fe47-4865-934c-52787273dce3
-# ╠═eb889f4f-9bce-43d7-ba4a-b90d5e4eec2b
-# ╠═b9697ea7-a186-4c53-8ab8-1f9758bf2ef8
-# ╠═c79eb557-9261-4130-b0ba-92dbc852dde0
-# ╠═ae3e8e26-22a2-4982-917e-c3204fac99af
-# ╠═f61bbf72-c4bc-4e6d-b335-85a64f0e793e
-# ╠═ca46fd3b-c0dc-4e46-bef1-6b1bb8c99bbd
-# ╠═7a8e3d9d-a218-462f-b61d-6d1f6b513d78
-# ╠═fc25dfea-bfad-4e9d-906c-1cf1f9943f13
-# ╠═ab329fb4-d3ff-4522-9d7a-a14807b6df8e
+# ╟─d5e3cece-f2c9-48c0-9e2c-a5c2f6a17e11
+# ╟─5741f2bc-f93d-4868-b814-6dfdaa1d27e4
+# ╟─c51cb563-fe47-4865-934c-52787273dce3
+# ╟─eb889f4f-9bce-43d7-ba4a-b90d5e4eec2b
+# ╟─b9697ea7-a186-4c53-8ab8-1f9758bf2ef8
+# ╟─c79eb557-9261-4130-b0ba-92dbc852dde0
+# ╟─ae3e8e26-22a2-4982-917e-c3204fac99af
+# ╟─f61bbf72-c4bc-4e6d-b335-85a64f0e793e
+# ╟─ca46fd3b-c0dc-4e46-bef1-6b1bb8c99bbd
+# ╟─7a8e3d9d-a218-462f-b61d-6d1f6b513d78
+# ╟─fc25dfea-bfad-4e9d-906c-1cf1f9943f13
+# ╟─ab329fb4-d3ff-4522-9d7a-a14807b6df8e
 # ╟─794e18aa-0617-4061-9cca-13a1cfd4944d
-# ╠═3f68debf-59e3-4e29-baf1-ffa2a07aa8fc
-# ╠═64a8c9be-8572-4a72-950a-d23591742b2c
-# ╠═051ac47b-dd1e-48d1-99fa-3badeb8880e6
-# ╠═599d8909-7c64-402c-935a-19e956149726
-# ╠═12d399e9-44c7-49e6-a9cb-8f959e8a57ca
-# ╠═3981c376-8631-4a97-b64e-c1c0080700c5
-# ╠═2e2ef177-a866-40e1-ad45-a04d664138ea
-# ╠═c993e9aa-4bf8-4e8d-840c-2152d1c5a327
-# ╠═90fe4a55-0dd0-4880-9397-6fccb7083b26
-# ╠═65d12936-e9d4-4419-92d9-29894ba7ed14
-# ╠═16f07f14-2155-4eed-9d4e-f9e88d863678
-# ╠═1ba9ca3d-5dba-4dc2-ba42-59fcf8292cc0
-# ╠═3253f1a1-d633-4206-887a-d77db9e922d5
-# ╠═ad7df85d-1448-4f56-80e1-b6cf5569a936
-# ╠═f40d5884-72da-4f98-973e-dc79fe229249
+# ╟─3f68debf-59e3-4e29-baf1-ffa2a07aa8fc
+# ╟─64a8c9be-8572-4a72-950a-d23591742b2c
+# ╟─051ac47b-dd1e-48d1-99fa-3badeb8880e6
+# ╟─599d8909-7c64-402c-935a-19e956149726
+# ╟─12d399e9-44c7-49e6-a9cb-8f959e8a57ca
+# ╟─3981c376-8631-4a97-b64e-c1c0080700c5
+# ╟─2e2ef177-a866-40e1-ad45-a04d664138ea
+# ╟─c993e9aa-4bf8-4e8d-840c-2152d1c5a327
+# ╟─90fe4a55-0dd0-4880-9397-6fccb7083b26
+# ╟─65d12936-e9d4-4419-92d9-29894ba7ed14
+# ╟─16f07f14-2155-4eed-9d4e-f9e88d863678
+# ╟─1ba9ca3d-5dba-4dc2-ba42-59fcf8292cc0
+# ╟─3253f1a1-d633-4206-887a-d77db9e922d5
+# ╟─ad7df85d-1448-4f56-80e1-b6cf5569a936
+# ╟─f40d5884-72da-4f98-973e-dc79fe229249
 # ╟─ce857c34-c939-11f1-8a90-dbf15df7b4a9
-# ╠═ce857c48-c939-11f1-b7d9-25caffb70cd2
+# ╟─ce857c48-c939-11f1-b7d9-25caffb70cd2
 # ╟─ce857c52-c939-11f1-a1a6-0357bdfc8bdc
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
