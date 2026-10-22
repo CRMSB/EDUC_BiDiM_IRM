@@ -63,6 +63,10 @@ The acceleration in EPI relies on three tricks:
 - the acquisition of the signal in positive and negative directions alternatively
 - the acquisition of the signal during the ramp times
 This requires a more complex reconstruction that will be performed here step by step. 
+
+Here is a sequence diagram of the EPI.
+![Fig1]
+(https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPI/epi_sequence_diagram.svg?raw=true)
 """
 
 # ╔═╡ 3a7a738d-129b-41a4-9a44-c9bdfcd3e180
@@ -2742,7 +2746,7 @@ version = "1.13.0+0"
 # ╟─ce848b7e-c939-11f1-b0e6-0b6babc5505a
 # ╠═ce857734-c939-11f1-a910-9de016fca185
 # ╠═ce857766-c939-11f1-a743-c7bd01aef4da
-# ╟─ce857782-c939-11f1-b207-a90fed7c07e9
+# ╠═ce857782-c939-11f1-b207-a90fed7c07e9
 # ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
 # ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
 # ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
