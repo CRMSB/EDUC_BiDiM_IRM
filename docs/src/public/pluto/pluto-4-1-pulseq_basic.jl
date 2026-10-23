@@ -500,11 +500,44 @@ end
 md"""
 ## 5.3 Phase encoding
 
-Along ``y``, each TR acquires one k-space line: the phase-encoding gradient (played during the prephaser block) has an area
+Along ``y``, each TR acquires **one k-space line**. The phase-encoding gradient (played during the prephaser block) sets which line. Let's build the table of the phase encoding in three steps.
 
-$$\text{area}_y(j) = \left(j - \frac{N_y}{2}\right)\Delta k_y, \qquad j = 0, \dots, N_y - 1$$
+**1. Which lines do we want?** ``N_y`` lines separated by ``\Delta k_y``, with ``k_y = 0`` at index ``N_y/2 + 1`` (the convention of the centered FFT, as for ``k_x``). In units of ``\Delta k_y``, the lines are the integers
 
-from ``-N_y\Delta k_y/2`` to ``(N_y/2 - 1)\Delta k_y``, again with ``k_y = 0`` at index ``N_y/2 + 1``. In practice we create **one** trapezoid for the largest area ``N_y\Delta k_y/2`` and **scale** its amplitude for each line (`scale * gy_pre`): the timing is identical for every TR.
+$$m = -\frac{N_y}{2},\ \dots,\ -1,\ 0,\ 1,\ \dots,\ \frac{N_y}{2} - 1$$
+
+The range is **asymmetric**: ``N_y`` is even, so there is one more line on the negative side.
+
+**2. Which gradient area for each line?** The k-space position is the area of the gradient: line ``m`` needs an area ``m\,\Delta k_y``.
+
+**3. One gradient, scaled.** We create **one** trapezoid `gy_pre`, with the **largest** area ``N_y/2 \cdot \Delta k_y``, and **scale** its amplitude for each line (`scale * gy_pre`):
+
+$$\text{scale}(m) = \frac{m\,\Delta k_y}{N_y/2 \cdot \Delta k_y} = \frac{m}{N_y/2}$$
+
+All the phase-encoding gradients then have the same shape and the same duration: only the amplitude changes, and the timing of the TR is identical for every line.
+
+Example for ``N_y = 8``:
+
+| TR number ``j`` | line ``m = k_y/\Delta k_y`` | area (× ``\Delta k_y``) | scale |
+|:-:|:-:|:-:|:-:|
+| 0 | −4 | −4 | −1 |
+| 1 | −3 | −3 | −0.75 |
+| 2 | −2 | −2 | −0.5 |
+| 3 | −1 | −1 | −0.25 |
+| 4 | **0** | 0 | **0** |
+| 5 | 1 | 1 | 0.25 |
+| 6 | 2 | 2 | 0.5 |
+| 7 | 3 | 3 | 0.75 |
+
+The scale never reaches +1: this is the asymmetry of step 1. In Julia, the three steps read:
+
+```julia
+ky_lines  = (-Ny ÷ 2):(Ny ÷ 2 - 1)    # 1. lines, in units of Δk_y
+area_pe   = ky_lines .* Δk[2]         # 2. area of each line (1/m)
+pe_scales = area_pe ./ area_gy_pre    # 3. scale of the gradient with the largest area
+```
+
+which is the same as the compact form `pe_scales = ((0:Ny-1) .- Ny/2) ./ (Ny/2)`.
 
 ## 5.4 Same block, same duration
 
@@ -596,8 +629,10 @@ begin
 	gx_pre = make_trapezoid(; area=area_gx_pre, duration=t_pre, sys)
 	gy_pre = make_trapezoid(; area=area_gy_pre, duration=t_pre, sys)
 
-	# scaling of gy_pre for each line : area = (j - Ny/2) Δk, j = 0 … Ny-1
-	pe_scales = ((0:Ny-1) .- Ny / 2) ./ (Ny / 2)
+	# phase-encoding table (section 5.3)
+	ky_lines = (-Ny ÷ 2):(Ny ÷ 2 - 1)        # 1. lines, in units of Δk_y : -Ny/2 … Ny/2-1
+	area_pe = ky_lines .* Δk[2]              # 2. area of each line (1/m)
+	pe_scales = area_pe ./ area_gy_pre       # 3. scale of gy_pre for each line
 end;
 
 # ╔═╡ b2a7cb8c-c95c-11f1-baa4-03914e74062a
