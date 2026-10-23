@@ -500,11 +500,44 @@ end
 md"""
 ## 5.3 Phase encoding
 
-Along ``y``, each TR acquires one k-space line: the phase-encoding gradient (played during the prephaser block) has an area
+Along ``y``, each TR acquires **one k-space line**. The phase-encoding gradient (played during the prephaser block) sets which line. Let's build the table of the phase encoding in three steps.
 
-$$\text{area}_y(j) = \left(j - \frac{N_y}{2}\right)\Delta k_y, \qquad j = 0, \dots, N_y - 1$$
+**1. Which lines do we want?** ``N_y`` lines separated by ``\Delta k_y``, with ``k_y = 0`` at index ``N_y/2 + 1`` (the convention of the centered FFT, as for ``k_x``). In units of ``\Delta k_y``, the lines are the integers
 
-from ``-N_y\Delta k_y/2`` to ``(N_y/2 - 1)\Delta k_y``, again with ``k_y = 0`` at index ``N_y/2 + 1``. In practice we create **one** trapezoid for the largest area ``N_y\Delta k_y/2`` and **scale** its amplitude for each line (`scale * gy_pre`): the timing is identical for every TR.
+$$m = -\frac{N_y}{2},\ \dots,\ -1,\ 0,\ 1,\ \dots,\ \frac{N_y}{2} - 1$$
+
+The range is **asymmetric**: ``N_y`` is even, so there is one more line on the negative side.
+
+**2. Which gradient area for each line?** The k-space position is the area of the gradient: line ``m`` needs an area ``m\,\Delta k_y``.
+
+**3. One gradient, scaled.** We create **one** trapezoid `gy_pre`, with the **largest** area ``N_y/2 \cdot \Delta k_y``, and **scale** its amplitude for each line (`scale * gy_pre`):
+
+$$\text{scale}(m) = \frac{m\,\Delta k_y}{N_y/2 \cdot \Delta k_y} = \frac{m}{N_y/2}$$
+
+All the phase-encoding gradients then have the same shape and the same duration: only the amplitude changes, and the timing of the TR is identical for every line.
+
+Example for ``N_y = 8``:
+
+| TR number ``j`` | line ``m = k_y/\Delta k_y`` | area (× ``\Delta k_y``) | scale |
+|:-:|:-:|:-:|:-:|
+| 0 | −4 | −4 | −1 |
+| 1 | −3 | −3 | −0.75 |
+| 2 | −2 | −2 | −0.5 |
+| 3 | −1 | −1 | −0.25 |
+| 4 | **0** | 0 | **0** |
+| 5 | 1 | 1 | 0.25 |
+| 6 | 2 | 2 | 0.5 |
+| 7 | 3 | 3 | 0.75 |
+
+The scale never reaches +1: this is the asymmetry of step 1. In Julia, the three steps read:
+
+```julia
+ky_lines  = (-Ny ÷ 2):(Ny ÷ 2 - 1)    # 1. lines, in units of Δk_y
+area_pe   = ky_lines .* Δk[2]         # 2. area of each line (1/m)
+pe_scales = area_pe ./ area_gy_pre    # 3. scale of the gradient with the largest area
+```
+
+which is the same as the compact form `pe_scales = ((0:Ny-1) .- Ny/2) ./ (Ny/2)`.
 
 ## 5.4 Same block, same duration
 
@@ -596,8 +629,10 @@ begin
 	gx_pre = make_trapezoid(; area=area_gx_pre, duration=t_pre, sys)
 	gy_pre = make_trapezoid(; area=area_gy_pre, duration=t_pre, sys)
 
-	# scaling of gy_pre for each line : area = (j - Ny/2) Δk, j = 0 … Ny-1
-	pe_scales = ((0:Ny-1) .- Ny / 2) ./ (Ny / 2)
+	# phase-encoding table (section 5.3)
+	ky_lines = (-Ny ÷ 2):(Ny ÷ 2 - 1)        # 1. lines, in units of Δk_y : -Ny/2 … Ny/2-1
+	area_pe = ky_lines .* Δk[2]              # 2. area of each line (1/m)
+	pe_scales = area_pe ./ area_gy_pre       # 3. scale of gy_pre for each line
 end;
 
 # ╔═╡ b2a7cb8c-c95c-11f1-baa4-03914e74062a
@@ -1608,6 +1643,76 @@ md"""
 answer_folded(md"""
 **Q31** At 5°, the signal $\approx M_0 \sin\alpha$ hardly depends on $T_1$ (proton density weighting: the CSF is bright). At 30°, the longitudinal magnetization of the tissues with a long $T_1$ does not recover between the pulses ($T_1$ weighting: the CSF is dark, the white matter bright). The **two** images together give $T_1$: writing the Ernst equation as $S/\sin\alpha = E_1\, S/\tan\alpha + M_0(1 - E_1)$, the slope between the two flip angles gives $E_1 = e^{-TR/T_1}$ in each voxel (DESPOT1 / variable flip angle method).
 """)
+
+# ╔═╡ db148658-cedd-11f1-b46f-aae81d03624e
+md"""
+## 5.6 Durations: always use `sys`
+
+To compute a delay (`make_delay(d)`), we need the duration of the other blocks. A block lasts as long as its longest event, but the time an event really occupies in a block depends on the **scanner**:
+
+* after an RF pulse, the block must last at least the **RF ring-down** time (`RF_ring_down_time`),
+* after the last ADC sample, the block must last at least the **ADC dead time** (`ADC_dead_time`),
+* the RF and ADC samples are placed at the **center** of their raster intervals: the event occupies half an interval more at its edges.
+
+These are properties of the scanner: they are stored in `sys`, **not in the events**. KomaMRI therefore gives two durations:
+
+| | what it measures |
+|:--|:--|
+| `dur(event)` | the event alone (up to its last sample, or the end of the gradient) |
+| `dur(event, sys)` | the time the event **occupies in a block**: with the ring-down, the ADC dead time and the sample edges |
+
+Only `dur(event, sys)` can be used to compute a block duration or a delay. With `dur(event)`, the block is too short: `check_timing` rejects the sequence or, if it is not checked, the next block starts during the ringing of the RF coil (e.g. an ADC records it).
+
+*In pypulseq, `calc_duration(event)` corresponds to `dur(event, sys)`: the ring-down and the dead times are copied into each event when it is created with `system=...`.*
+
+For the events of section 4.3 and a readout:
+"""
+
+# ╔═╡ db1486c6-cedd-11f1-b46f-aae81d03624e
+"""
+    block_duration(events...; sys=sys)
+
+Duration of a block containing `events` (RF, gradients, ADC) : longest event, including
+the RF ring-down and the ADC dead time, rounded up to the block duration raster.
+"""
+block_duration(events...; sys=sys) = ceil_to_raster(maximum(dur(e, sys) for e in events), sys.limits.DUR_Δt)
+
+# ╔═╡ db1486f8-cedd-11f1-b46f-aae81d03624e
+md"""
+The block duration is then the **longest** event, rounded **up** to the block duration raster: this is what the function `block_duration(events...)` below does.
+"""
+
+# ╔═╡ db148716-cedd-11f1-b46f-aae81d03624e
+let
+	gx_demo = make_trapezoid(; flat_area=32 / 0.256, flat_time=32 * 20e-6, sys)
+	adc_demo = make_adc(32; dwell=20e-6, delay=gx_demo.rise, sys)
+	events = [("RF pulse (section 4.3)", rf_ex, "RF ring-down (20 µs) + half an RF raster"),
+		("slice-selection gradient", gz_ex, "none: the duration of a gradient does not depend on sys"),
+		("ADC (32 samples, dwell 20 µs)", adc_demo, "ADC dead time (10 µs) + half a dwell")]
+	rows = ["| $(n) | $(round(dur(e) * 1e6, digits=1)) | $(round(dur(e, sys) * 1e6, digits=1)) | $(round((dur(e, sys) - dur(e)) * 1e6, digits=1)) | $(why) |" for (n, e, why) in events]
+	Markdown.parse("| event | `dur(event)` (µs) | `dur(event, sys)` (µs) | difference (µs) | why |\n|:--|--:|--:|--:|:--|\n" * join(rows, "\n"))
+end
+
+# ╔═╡ db148734-cedd-11f1-b46f-aae81d03624e
+md"""
+**Three rules for the timing calculations**
+
+1. Create the sequences with **`Sequence(sys)`**: the timing definitions of the scanner (rasters, dead times, ring-down) are stored in the sequence and written in the `.seq` file.
+2. Compute the durations with **`dur(event, sys)`**, and the duration of a block with `block_duration(events...)`.
+3. Check the sequence with **`check_timing(seq, sys)`**. With only `check_timing(seq)`, the definitions stored in the sequence are used: for a `Sequence()` created without `sys`, these are the ones of a default scanner, and the errors are **not** detected.
+
+Example: the delay needed to start the readout block at a time ``T`` after the center of the RF pulse, with a prephaser block in between:
+
+```julia
+D_exc = block_duration(rf, gz)                     # excitation block
+D_pre = block_duration(gx_pre, gy_pre, gz_reph)    # prephaser block
+t_rf  = rf.delay + rf.center                       # RF center in the excitation block
+d = round_to_raster(T - (D_exc - t_rf) - D_pre, sys.limits.DUR_Δt)
+@assert d >= 0 "T is too short"
+```
+
+*Note: in section 6.3, the durations are read in `seq.DUR` of a temporary sequence. KomaMRI computes `seq.DUR` with `dur(event)`, without `sys`: it works there only because, in each block, a gradient lasts longer than the RF pulse + ring-down or the ADC + dead time. `block_duration` is always correct.*
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -4456,6 +4561,11 @@ version = "1.13.0+0"
 # ╟─b2a7cb02-c95c-11f1-8e23-f373e37fe610
 # ╟─b2a7cb0c-c95c-11f1-8445-d70d1b45d7e0
 # ╟─b2a7cb20-c95c-11f1-9667-e33b18fb0dff
+# ╟─db148658-cedd-11f1-b46f-aae81d03624e
+# ╠═db148716-cedd-11f1-b46f-aae81d03624e
+# ╟─db1486f8-cedd-11f1-b46f-aae81d03624e
+# ╠═db1486c6-cedd-11f1-b46f-aae81d03624e
+# ╟─db148734-cedd-11f1-b46f-aae81d03624e
 # ╟─b2a7cb34-c95c-11f1-99b2-25ec21bd0719
 # ╠═b2a7cb3e-c95c-11f1-aac0-2b86d26acaa3
 # ╟─b2a7cb48-c95c-11f1-a683-c180cbc4be6c

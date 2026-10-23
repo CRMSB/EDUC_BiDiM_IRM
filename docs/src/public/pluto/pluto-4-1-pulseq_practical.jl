@@ -141,7 +141,13 @@ Create, with the **same duration** (the shortest possible):
 * `gx_pre`: the readout prephaser, so that the sample ``N_x/2+1`` of the readout is at ``k_x = 0`` (do not forget the half k-space step, course section 5.2);
 * `gy_pre`: the phase-encoding gradient with the **largest** area, ``N_y/2 \cdot \Delta k_y``;
 
-and `pe_scales`, the vector of the ``N_y`` scaling factors of `gy_pre` (``k_y`` from ``-N_y/2\,\Delta k_y`` to $(N_y/2-1)\,\Delta k_y$).
+and `pe_scales`, the vector of the ``N_y`` scaling factors of `gy_pre` (course section 5.3). Build it in three steps:
+
+1. `ky_lines`: the k-space lines, in units of ``\Delta k_y``: from ``-N_y/2`` to ``N_y/2 - 1`` (with ``k_y = 0`` at index ``N_y/2+1``);
+2. `area_pe`: the gradient area of each line (1/m), i.e. the line times ``\Delta k_y``;
+3. `pe_scales`: the factor applied to `gy_pre` for each line, i.e. the area of the line divided by the area of `gy_pre` (in 1/m).
+
+For ``N_y = 8``, the lines are −4 … 3 and the scales −1, −0.75, …, 0.75 (the scale never reaches +1: why?).
 
 *Hint: `area(g)` returns the area of a gradient in T·s/m: multiply by γ̄ to get 1/m.*
 """
@@ -150,7 +156,9 @@ and `pe_scales`, the vector of the ``N_y`` scaling factors of `gy_pre` (``k_y`` 
 begin
 	gx_pre = missing      # 👉
 	gy_pre = missing      # 👉
-	pe_scales = missing   # 👉 vector of Ny values
+	ky_lines = missing    # 👉 1. lines, in units of Δk_y
+	area_pe = missing     # 👉 2. area of each line (1/m)
+	pe_scales = missing   # 👉 3. scale of gy_pre for each line (vector of Ny values)
 end;
 
 # ╔═╡ 72a0bea8-cde7-11f1-bc7d-6d20020551ab
@@ -267,8 +275,9 @@ begin
 		isapprox(dur(gx_pre), dur(gy_pre); atol=1e-9) || return keep_working(; text=md"`gx_pre` and `gy_pre` must have the same duration.")
 		isapprox(gy_pre.A * (gy_pre.T + (gy_pre.rise + gy_pre.fall) / 2) * γ̄, Ny / 2 * Δk[2]; rtol=1e-3) || return keep_working(; text=md"The area of `gy_pre` must be ``N_y/2 \cdot \Delta k_y``.")
 		length(pe_scales) == Ny || return keep_working(; text=md"`pe_scales` must contain ``N_y`` values.")
-		ky = sort(collect(pe_scales)) .* (Ny / 2)
-		return ok_or(isapprox(ky, collect((0:Ny-1) .- Ny / 2); atol=1e-6), md"The phase-encoding lines must go from ``-N_y/2`` to ``N_y/2 - 1`` (in ``\Delta k_y``).")
+		# line obtained for each scale : scale × (area of gy_pre) / Δk_y
+		ky = sort(collect(pe_scales) .* (area(gy_pre) * γ̄ / Δk[2]))
+		return ok_or(maximum(abs, ky .- ((0:Ny-1) .- Ny / 2)) < 1e-3, md"The phase-encoding lines must go from ``-N_y/2`` to ``N_y/2 - 1`` (in ``\Delta k_y``).")
 	end
 
 	function check_delays(delay_TE, delay_TR)
