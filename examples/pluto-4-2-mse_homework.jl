@@ -31,6 +31,7 @@ begin
 	using KomaMRI
 	using KomaMRI.PulseDesigner
 	using FFTW
+	using LsqFit                # curve_fit
 	using LinearAlgebra
 	using Statistics
 
@@ -107,6 +108,120 @@ To keep a stable echo train, the sequence must fulfill the **Carr-Purcell-Meiboo
 | *after the last echo:* | phase-encoding rewinder, then delay to reach TR |
 """
 
+# ╔═╡ 21f16548-cee6-11f1-b7be-aae81d03624e
+md"""
+## 1.4 Timing diagram
+
+The figure shows the beginning of one TR (the first two echoes). The **three delays** (orange) are the only free parameters of the timing; you will compute them in step 5 from the durations of the other blocks:
+
+* `d0` sets the time between the center of the 90° and the center of the **first 180°**: ESP/2,
+* `d1` sets the time between the center of a 180° and the **echo** (center of the readout): ESP/2,
+* `d2` sets the time between the echo and the center of the **next 180°**: ESP/2.
+
+Also note: the crushers are **symmetric** around each 180°, the phase encoding (PE) is **rewound** before the next 180°, and the readout prephaser has the **same sign** as the readout gradient (step 3).
+"""
+
+# ╔═╡ 21f16598-cee6-11f1-b7be-aae81d03624e
+let
+	# schematic timing diagram (arbitrary units : ESP = 10)
+	f = Figure(size=(1200, 620))
+	ax = Axis(f[1, 1], xlabel="time (ESP = 10)", yticksvisible=false, yticklabelsvisible=false,
+		xticks=0:5:20, title="Multi-spin-echo : one TR (first two echoes)")
+	hidespines!(ax, :l, :r, :t)
+	ax.ygridvisible = false
+
+	rows = (RF=8.0, Gz=6.0, Gy=4.0, Gx=2.0, ADC=0.0)
+	for (name, y) in pairs(rows)
+		hlines!(ax, [y], color=(:gray, 0.6), linewidth=1)
+		text!(ax, -3.2, y, text=string(name), align=(:right, :center), fontsize=16, font=:bold)
+	end
+
+	# blocks and delays (ms in units of ESP/10)
+	blocks = [(-1.2, 1.2, "excitation"), (1.2, 2.4, "prephasers"), (2.4, 3.1, "d0"),
+		(3.1, 4.0, "crusher"), (4.0, 6.0, "refocusing"), (6.0, 6.9, "crusher\n+ PE"), (6.9, 8.4, "d1"),
+		(8.4, 11.6, "readout"), (11.6, 13.1, "d2"), (13.1, 14.0, "crusher\n+ rew."),
+		(14.0, 16.0, "refocusing"), (16.0, 16.9, "crusher\n+ PE"), (16.9, 18.4, "d1"), (18.4, 21.6, "readout"), (21.6, 22.6, "d2")]
+	for (a, b, name) in blocks
+		isdelay = name in ("d0", "d1", "d2")
+		poly!(ax, Rect(a, -2.6, b - a, 1.0), color=isdelay ? (:orange, 0.6) : (:gray, 0.15), strokecolor=:gray, strokewidth=1)
+		text!(ax, (a + b) / 2, -2.1, text=name, align=(:center, :center), fontsize=isdelay ? 15 : 10, font=isdelay ? :bold : :regular)
+		isdelay && vspan!(ax, [a], [b], ymin=0.17, ymax=0.78, color=(:orange, 0.15))
+	end
+	text!(ax, -3.2, -2.1, text="blocks", align=(:right, :center), fontsize=16, font=:bold)
+
+	# RF : sinc pulses
+	sincpulse(t0, A) = (t = range(-1, 1, 200); (t0 .+ t, rows.RF .+ A .* sinc.(2 .* t) .* (0.5 .+ 0.5 .* cos.(π .* t))))
+	for (t0, A, lab) in ((0.0, 0.8, "90°ₓ"), (5.0, 1.5, "180°ᵧ"), (15.0, 1.5, "180°ᵧ"))
+		x, y = sincpulse(t0, A)
+		lines!(ax, x, y, color=:black, linewidth=2)
+		text!(ax, t0, rows.RF + A + 0.25, text=lab, align=(:center, :bottom), fontsize=14)
+	end
+
+	# trapezoid helper
+	trap(a, b, A, y0; r=0.15) = ([a, a + r, b - r, b], y0 .+ [0, A, A, 0])
+	function g!(a, b, A, row; color=:steelblue, kw...)
+		x, y = trap(a, b, A, row)
+		poly!(ax, Point2f.(x, y), color=(color, 0.5), strokecolor=color, strokewidth=1.5; kw...)
+	end
+
+	# Gz : slice selection, rephaser, crushers
+	g!(-1.2, 1.2, 0.7, rows.Gz)
+	g!(1.3, 2.3, -0.8, rows.Gz)
+	for t0 in (5.0, 15.0)
+		g!(t0 - 1.0, t0 + 1.0, 0.5, rows.Gz)                     # slice selection of the 180°
+		g!(t0 - 1.9, t0 - 1.0, 1.1, rows.Gz, color=:purple)      # crusher 1
+		g!(t0 + 1.0, t0 + 1.9, 1.1, rows.Gz, color=:purple)      # crusher 2
+	end
+	text!(ax, 3.55, rows.Gz + 1.2, text="crushers", align=(:center, :bottom), fontsize=11, color=:purple)
+
+	# Gy : phase encoding after the 180°, rewinder before the next one
+	for A in range(-1, 1, 7)
+		x, y = trap(6.05, 6.85, 0.9A, rows.Gy)
+		lines!(ax, x, y, color=:darkgreen, linewidth=1)
+		x, y = trap(13.15, 13.95, -0.9A, rows.Gy)
+		lines!(ax, x, y, color=:darkgreen, linewidth=1, linestyle=:dash)
+		x, y = trap(16.05, 16.85, 0.9A, rows.Gy)
+		lines!(ax, x, y, color=:darkgreen, linewidth=1)
+	end
+	text!(ax, 6.45, rows.Gy + 1.0, text="PE", align=(:center, :bottom), fontsize=11, color=:darkgreen)
+	text!(ax, 13.55, rows.Gy + 1.0, text="rewinder", align=(:center, :bottom), fontsize=11, color=:darkgreen)
+
+	# Gx : prephaser (same sign as the readout !) and readouts
+	g!(1.3, 2.3, 0.8, rows.Gx, color=:firebrick)
+	text!(ax, 1.8, rows.Gx + 1.0, text="+A/2", align=(:center, :bottom), fontsize=11, color=:firebrick)
+	for t0 in (10.0, 20.0)
+		g!(t0 - 1.6, t0 + 1.6, 0.6, rows.Gx, color=:firebrick)
+		text!(ax, t0, rows.Gx + 0.8, text="area A", align=(:center, :bottom), fontsize=11, color=:firebrick)
+	end
+
+	# ADC and echoes
+	for (t0, A) in ((10.0, 1.2), (20.0, 0.9))
+		poly!(ax, Rect(t0 - 1.4, rows.ADC - 0.15, 2.8, 0.3), color=(:gray, 0.4))
+		t = range(-1.4, 1.4, 300)
+		lines!(ax, t0 .+ t, rows.ADC .+ A .* sinc.(1.5 .* t), color=:black, linewidth=1.5)
+	end
+	text!(ax, 10.0, rows.ADC - 0.5, text="echo 1", align=(:center, :top), fontsize=12)
+	text!(ax, 20.0, rows.ADC - 0.5, text="echo 2", align=(:center, :top), fontsize=12)
+
+	# timing : ESP/2 intervals and echo times
+	ytop = rows.RF + 2.8
+	for (a, b) in ((0.0, 5.0), (5.0, 10.0), (10.0, 15.0), (15.0, 20.0))
+		arrows2d!(ax, [Point2f((a + b) / 2, ytop)], [Vec2f((b - a) / 2 - 0.1, 0)], tipwidth=8, tiplength=8, color=:black)
+		arrows2d!(ax, [Point2f((a + b) / 2, ytop)], [Vec2f(-(b - a) / 2 + 0.1, 0)], tipwidth=8, tiplength=8, color=:black)
+		text!(ax, (a + b) / 2, ytop + 0.2, text="ESP/2", align=(:center, :bottom), fontsize=13)
+	end
+	for (b, lab, y) in ((10.0, "TE₁ = ESP", ytop + 1.2), (20.0, "TE₂ = 2 ESP", ytop + 2.0))
+		lines!(ax, [0, b], [y, y], color=:gray30, linewidth=1)
+		scatter!(ax, [0, b], [y, y], marker=:vline, markersize=12, color=:gray30)
+		text!(ax, b / 2, y + 0.1, text=lab, align=(:center, :bottom), fontsize=13, color=:gray30)
+	end
+	vlines!(ax, [0, 5, 10, 15, 20], color=(:black, 0.25), linestyle=:dot)
+
+	xlims!(ax, -4.5, 23)
+	ylims!(ax, -2.9, ytop + 2.8)
+	f
+end
+
 # ╔═╡ baf1b0b4-cde1-11f1-8769-0fabb63ae6ad
 md"""
 # 2. Scanner and parameters
@@ -147,10 +262,10 @@ The excitation and the refocusing pulses are slice-selective sinc pulses (`make_
 
 # ╔═╡ baf1b0e6-cde1-11f1-a7a2-0b01a8ce05fd
 begin
-	flip_exc = (deg2rad(90))        # 👉 excitation flip angle (rad)
-	flip_ref = (deg2rad(180))         # 👉 refocusing flip angle (rad)
-	phase_ref = deg2rad(90)       # 👉 phase of the refocusing pulse (rad)
-	thickness_ref = 3*Δz   # 👉 slice thickness of the refocusing pulse (m)
+	flip_exc = missing        # 👉 excitation flip angle (rad)
+	flip_ref = missing        # 👉 refocusing flip angle (rad)
+	phase_ref = missing       # 👉 phase of the refocusing pulse (rad)
+	thickness_ref = missing   # 👉 slice thickness of the refocusing pulse (m)
 end;
 
 # ╔═╡ baf1b118-cde1-11f1-a7af-51185aae21a9
@@ -164,8 +279,8 @@ Give the number of cycles of dephasing across the slice and the corresponding gr
 
 # ╔═╡ baf1b122-cde1-11f1-80e8-f7f45365f1dd
 begin
-	n_cycles_crusher = 2   # 👉 number of cycles of dephasing across the slice (2 to 4)
-	area_crusher = n_cycles_crusher * 1/Δz       # 👉 area of each crusher (1/m)
+	n_cycles_crusher = missing   # 👉 number of cycles of dephasing across the slice (2 to 4)
+	area_crusher = missing       # 👉 area of each crusher (1/m)
 end;
 
 # ╔═╡ baf1b14a-cde1-11f1-a778-9507760a0273
@@ -186,8 +301,8 @@ gx = make_trapezoid(; flat_area=N * Δk, flat_time=N * dwell, sys);
 
 # ╔═╡ baf1b168-cde1-11f1-b563-4bc6e082af48
 begin
-	area_prephaser = area(gx)/2 * γ̄   # 👉 area of the readout prephaser (1/m). Hint : area(gx) is in T·s/m
-	adc_delay = gx.rise - dwell/2       # 👉 ADC delay (s)
+	area_prephaser = missing   # 👉 area of the readout prephaser (1/m). Hint : area(gx) is in T·s/m
+	adc_delay = missing        # 👉 ADC delay (s)
 end;
 
 # ╔═╡ baf1b19a-cde1-11f1-8a46-37c23d9a106a
@@ -199,8 +314,8 @@ The phase-encoding gradient is played after each 180° (in the same block as the
 
 # ╔═╡ baf1b1a4-cde1-11f1-b244-a5f9b76b0778
 begin
-	area_pe_max = N/2*(1/FOV)   # 👉 largest phase-encoding area (1/m)
-	pe_scales = (-N/2:1:N/2-1)/(N/2)    # 👉 vector of N scales : area of line j = pe_scales[j] * area_pe_max
+	area_pe_max = missing   # 👉 largest phase-encoding area (1/m)
+	pe_scales = missing     # 👉 vector of N scales : area of line j = pe_scales[j] * area_pe_max
 end;
 
 # ╔═╡ baf1b1cc-cde1-11f1-850e-5f82fc064330
@@ -268,10 +383,58 @@ md"""
 md"""
 ## 9.3 Reconstruction *(write the function)*
 
-Each profile of `raw.profiles` contains the $N$ samples of one readout (`p.data[:, 1]`) and its labels in its header: `p.head.idx.kspace_encode_step_1` (LIN) and `p.head.idx.contrast` (ECO), both 0-based.
+### The raw data : the MRD format
 
-Write `reconstruct_echoes(raw)` which returns an array of **magnitude images** of size $N \times N \times n_{echo}$: sort the profiles into one k-space per echo, then reconstruct each echo with a centered inverse FFT (`ifft2c` is given in the helper functions).
+The simulation returns the data in the **MRD** format (*ISMRM Raw Data*, also called ISMRMRD). It is the open format used by most reconstruction software (Gadgetron, MRIReco, BART...) and produced by the Pulseq interpreters on the scanners. In Julia, `raw` is a `RawAcquisitionData` with two fields:
+
+* `raw.params`: the header, a dictionary (matrix size, FOV, TE, TR...),
+* `raw.profiles`: a vector of **profiles**, one per readout (one ADC event), **in the order of acquisition**.
+
+Each profile `p` contains:
+
+| field | content |
+|:--|:--|
+| `p.data` | the samples: a matrix *number of samples × number of coils* (here N × 1) |
+| `p.head` | the acquisition header: number of samples, time stamp... and the counters `p.head.idx` |
+| `p.head.idx.kspace_encode_step_1` | phase-encoding line, given by the label `LIN` (**0-based**) |
+| `p.head.idx.contrast` | echo number, given by the label `ECO` (**0-based**) |
+| `p.traj` | k-space position of the samples (not available on a scanner) |
+
+The labels set in step 6 (`make_label(:SET, :LIN, j - 1)`, `make_label(:SET, :ECO, e - 1)`) are copied into these counters: this is how the reconstruction knows where each readout goes. Let's look at the first profiles:
 """
+
+# ╔═╡ 21f172e0-cee6-11f1-b7be-aae81d03624e
+md"""
+Each echo has its maximum at the sample N/2+1 (``k_x = 0``), and its amplitude changes from one echo to the next: this is the $T_2$ decay that we want to measure (look carefully at the first two echoes: we will come back to them in section 10).
+
+### Your function
+
+Write `reconstruct_echoes(raw)`, which returns the **magnitude images** of all the echoes (an array N × N × n_echo):
+
+1. create one empty k-space per echo: `k = zeros(ComplexF64, N, N, n_echo)`;
+2. loop over the profiles: read the line and the echo of each profile in its header (**add 1**: the counters start at 0, the Julia indices at 1) and copy `p.data[:, 1]` into the column `k[:, line, echo]`;
+3. reconstruct each echo with the centered inverse FFT `ifft2c` (given in the helper functions) and take the magnitude (`abs`).
+"""
+
+# ╔═╡ baf1b2e4-cde1-11f1-8a74-ab244d433e59
+"""
+    reconstruct_echoes(raw)
+
+Magnitude images (N × N × n_echo) of the multi-spin-echo raw data.
+"""
+function reconstruct_echoes(raw)
+	# 1. one empty k-space (N × N) per echo
+	k = zeros(ComplexF64, N, N, n_echo)
+	# 2. each profile goes to its line and its echo
+	for p in raw.profiles
+		# 👉 line = ...   (from p.head.idx, + 1)
+		# 👉 echo = ...   (from p.head.idx, + 1)
+		# 👉 k[:, line, echo] = ...
+	end
+	# 3. 👉 centered inverse FFT of each echo (ifft2c) and magnitude
+	images = zeros(N, N, n_echo)
+	return images
+end
 
 # ╔═╡ baf1b316-cde1-11f1-8460-776d6484a8bc
 md"""
@@ -279,24 +442,34 @@ md"""
 
 ## 10.1 Fit
 
-Write `fit_t2(signal, TEs)` which returns the $T_2$ (s) of a decay `signal` measured at the echo times `TEs`, using a **linear fit of the logarithm**:
+Write `fit_t2(signal, TEs)` which returns the $T_2$ (s) of a decay `signal` measured at the echo times `TEs`, by fitting the model
 
-$$\ln S(TE) = \ln S_0 - \frac{TE}{T_2}$$
+$$S(TE) = S_0\, e^{-TE/T_2}$$
 
-(least squares: `A \ y` solves the linear system `A x = y` in the least-squares sense). Return `NaN` if a value of the signal is ≤ 0.
+with a **non-linear least-squares fit**: `curve_fit` of the package `LsqFit.jl`.
+
+```julia
+model(TE, p) = p[1] .* exp.(-TE ./ p[2])     # p = [S0, T2]
+fit = curve_fit(model, TEs, signal, p0)      # p0 : initial guess of [S0, T2]
+coef(fit)                                    # fitted parameters [S0, T2]
+```
+
+The fit is iterative: give a reasonable initial guess (e.g. $S_0$ ≈ the first echo, $T_2$ ≈ 100 ms).
+
+!!! note "Linearization"
+    In this case, the model can also be **linearized**: $\ln S = \ln S_0 - TE/T_2$ is a straight line as a function of TE, and a linear regression of `log.(signal)` (`A \ log.(signal)` with `A = [1 TE]`) gives $T_2$ directly, without iterations. This only works for simple models; `curve_fit` works for any model (bi-exponential, model with an offset, EPG model...).
 """
 
 # ╔═╡ baf1b334-cde1-11f1-9ebf-1747f730556c
 """
     fit_t2(signal, TEs)
 
-T₂ (s) of a mono-exponential decay, by a linear fit of log(signal).
+T₂ (s) of a mono-exponential decay, by a non-linear least-squares fit (curve_fit).
 """
 function fit_t2(signal, TEs)
-	any(signal .<= 0) && return NaN
-	A = hcat(ones(length(TEs)), TEs)
-	c = A \ log.(signal)
-	return -1 / c[2]
+	# 👉 1. model of the signal : model(TE, p) = ...   with p = [S0, T2]
+	# 👉 2. initial guess p0 and fit : fit = curve_fit(model, TEs, signal, p0)
+	# 👉 3. return the fitted T2 : coef(fit) gives [S0, T2]
 	return missing
 end
 
@@ -384,9 +557,9 @@ Delays (s) of the multi-spin-echo sequence for an echo spacing `ESP`.
 """
 function cpmg_delays(ESP)
 	# 👉 write the three delays using the durations above
-	d0 = (ESP / 2 - ((D_exc - t_exc) + D_pre + D_crush + t_ref))      # 90° → 180°
-	d1 = (ESP / 2 - ((D_ref - t_ref) + D_crush + t_echo))             # 180° → echo
-	d2 = (ESP / 2 - ((D_read - t_echo) + D_crush + t_ref))            # echo → next
+	d0 = missing
+	d1 = missing
+	d2 = missing
 	return d0, d1, d2
 end
 
@@ -407,27 +580,7 @@ The refocusing pulse can be changed with the keywords `rf_ref` and `gz_ref`.
 function mse_sequence(; lines=1:N, rf_ref=rf_ref, gz_ref=gz_ref)
 	d0, d1, d2 = cpmg_delays(ESP)
 	seq = Sequence(sys)
-	for (n, j) in enumerate(lines)
-		@addblock seq += (rf_exc, z=gz_exc)                          # excitation
-		@addblock seq += (x=gx_pre, z=gz_exc_reph)                   # prephasers
-		@addblock seq += make_delay(d0)
-		for e in 1:n_echo
-			if e == 1
-				@addblock seq += (z=gz_crusher,)                       # crusher 1
-			else
-				@addblock seq += (z=gz_crusher, y=-pe_scales[j] * gy_pe) # crusher 1 + rewinder
-			end
-			@addblock seq += (rf_ref, z=gz_ref)                      # refocusing
-			@addblock seq += (z=gz_crusher, y=pe_scales[j] * gy_pe)   # crusher 2 + phase encoding
-			@addblock seq += make_delay(d1)
-			@addblock seq += (x=gx, adc, make_label(:SET, :LIN, j - 1), make_label(:SET, :ECO, e - 1))
-			@addblock seq += make_delay(d2)
-		end
-		@addblock seq += (y=-pe_scales[j] * gy_pe,)                  # last rewinder
-		elapsed = sum(seq.DUR) - (n - 1) * TR
-		@addblock seq += make_delay(round_to_raster(TR - elapsed, sys.limits.DUR_Δt))
-	end
-	
+	# 👉 for each line j in `lines` : one TR (excitation, prephasers, delay, echo train, rewinder, delay to TR)
 	return seq
 end
 
@@ -494,7 +647,11 @@ begin
 		thr = 0.1 * maximum(images[:, :, 1])
 		for i in axes(images, 1), j in axes(images, 2)
 			images[i, j, 1] > thr || continue
-			v = fit_t2(images[i, j, idx], TEs[idx])
+			v = try
+				fit_t2(images[i, j, idx], TEs[idx])
+			catch
+				NaN                       # the fit did not converge
+			end
 			m[i, j] = ismissing(v) ? NaN : v
 		end
 		return m
@@ -516,6 +673,7 @@ begin
 	"Compare the measured T₂ in each tube with the true value (validation if all errors < 10 %)"
 	function validate_t2(T2map)
 		meas = tube_t2(T2map)
+		all(isnan, meas) && return still_missing(; text=md"No T₂ measured yet: complete the reconstruction (9.3) and the fit (10.1).")
 		err = (meas .- T2_tubes) ./ T2_tubes
 		table = join(["| $(round(Int, T2_tubes[i] * 1e3)) | $(round(meas[i] * 1e3, digits=1)) | $(round(100 * err[i], digits=1)) % |" for i in 1:5], "\n")
 		verdict = all(abs.(err) .< 0.1) ?
@@ -610,18 +768,25 @@ end
 # ╔═╡ baf1b2d0-cde1-11f1-8739-97802d8973b9
 raw = simulate_mse(obj, seq);
 
-# ╔═╡ baf1b2e4-cde1-11f1-8a74-ab244d433e59
-"""
-    reconstruct_echoes(raw)
+# ╔═╡ 21f172a4-cee6-11f1-b7be-aae81d03624e
+let
+	rows = ["| $(i) | $(p.head.idx.kspace_encode_step_1) | $(p.head.idx.contrast) | $(size(p.data, 1)) × $(size(p.data, 2)) |" for (i, p) in enumerate(raw.profiles[1:min(12, end)])]
+	Markdown.parse("`raw.profiles` contains **$(length(raw.profiles)) profiles** (N × n_echo readouts). The first ones:\n\n" *
+		"| profile | `idx.kspace_encode_step_1` (LIN) | `idx.contrast` (ECO) | `size(p.data)` |\n|--:|--:|--:|--:|\n" * join(rows, "\n"))
+end
 
-Magnitude images (N × N × n_echo) of the multi-spin-echo raw data.
-"""
-function reconstruct_echoes(raw)
-	k = zeros(ComplexF64, N, N, n_echo)
+# ╔═╡ 21f172cc-cee6-11f1-b7be-aae81d03624e
+let
+	# the profiles of the central line (k_y = 0) : one per echo
+	f = Figure(size=(900, 350))
+	ax = Axis(f[1, 1], title="central line (LIN = N/2) : magnitude of p.data for each echo", xlabel="sample (k_x)", ylabel="|signal|")
 	for p in raw.profiles
-		k[:, p.head.idx.kspace_encode_step_1+1, p.head.idx.contrast+1] = p.data[:, 1]
+		p.head.idx.kspace_encode_step_1 == N ÷ 2 || continue
+		lines!(ax, 1:size(p.data, 1), abs.(p.data[:, 1]), label="ECO = $(p.head.idx.contrast)")
 	end
-	return cat([abs.(ifft2c(k[:, :, e])) for e in 1:n_echo]...; dims=3)
+	vlines!(ax, [N ÷ 2 + 1], color=:gray, linestyle=:dash)
+	axislegend(ax, position=:rt, nbanks=2)
+	f
 end
 
 # ╔═╡ baf1b302-cde1-11f1-bba2-534767550050
@@ -735,7 +900,7 @@ begin
 		te = (1:8) .* 10e-3
 		v = f(3.0 .* exp.(-te ./ 0.07), te)
 		v === missing && return still_missing()
-		return ok_or(isapprox(v, 0.07; rtol=1e-6), md"For a signal ``3\,e^{-TE/70\,\text{ms}}``, `fit_t2` must return 0.07 s.")
+		return ok_or(isapprox(v, 0.07; rtol=1e-4), md"For a signal ``3\,e^{-TE/70\,\text{ms}}``, `fit_t2` must return 0.07 s.")
 	end
 
 	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]))
@@ -790,6 +955,11 @@ check_recon(reconstruct_echoes, raw)
 # ╔═╡ baf1b33e-cde1-11f1-91ff-1dd542a0b47a
 check_fit(fit_t2)
 
+# ╔═╡ 21f180aa-cee6-11f1-b7be-aae81d03624e
+md"""
+**Q3 bis** *(optional)* Write the linearized fit `fit_t2_lin(signal, TEs)` (linear regression of `log.(signal)`) and compare its $T_2$ with `fit_t2` on a few pixels. Are they identical? Why? When would the linearization be a bad idea?
+""" |> question
+
 # ╔═╡ baf1b384-cde1-11f1-b1c3-9505c8a115c0
 md"""
 **Q4** With `thickness_ref = Δz` (same slice thickness for the 90° and the 180°), the $T_2$ values are overestimated. Look at the signal of the echoes (`show_decays` below): the second echo is **higher** than the first one. Explain why. *Hint: what is the flip angle of the refocusing pulse at the edges of the slice? What does a flip angle different from 180° create?*
@@ -812,6 +982,7 @@ FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
 KomaMRI = "6a340f8b-2cdf-4c04-99be-4953d9b66d0a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LsqFit = "2fda8390-95c7-5789-9bda-21331edee243"
 PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -821,6 +992,7 @@ CairoMakie = "~0.15.16"
 FFTW = "~1.10.0"
 HypertextLiteral = "~1.0.0"
 KomaMRI = "~0.14.0"
+LsqFit = "~0.15.1"
 PlutoTeachingTools = "~0.4.7"
 PlutoUI = "~0.7.83"
 """
@@ -831,7 +1003,23 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "35fa1f48f0b99fbedd63fcc099a1765ed11d5142"
+project_hash = "06539dbfcb9e2210ab45b2ef82fa4beef12223f8"
+
+[[deps.ADTypes]]
+deps = ["PrecompileTools"]
+git-tree-sha1 = "629de23e1c16911b439dabd2303c08af9575b226"
+uuid = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+version = "1.24.0"
+
+    [deps.ADTypes.extensions]
+    ADTypesChainRulesCoreExt = "ChainRulesCore"
+    ADTypesConstructionBaseExt = "ConstructionBase"
+    ADTypesEnzymeCoreExt = "EnzymeCore"
+
+    [deps.ADTypes.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -1235,6 +1423,12 @@ git-tree-sha1 = "6c389fa857f6ca5a95474b52a52023fd77f24cb7"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
 version = "0.2.14"
 
+[[deps.CommonSubexpressions]]
+deps = ["MacroTools"]
+git-tree-sha1 = "cda2cfaebb4be89c9084adaca7dd7333369715c5"
+uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
+version = "0.3.1"
+
 [[deps.CommonWorldInvalidations]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "7c4ea0adfb7238bf4678aa36325863fab6163f6f"
@@ -1363,6 +1557,71 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "cd6756e833c377e0ce9cd63fb97689a255f12323"
 uuid = "04572ae6-984a-583e-9378-9577a1c2574d"
 version = "1.33.4+0"
+
+[[deps.DiffResults]]
+deps = ["StaticArraysCore"]
+git-tree-sha1 = "782dd5f4561f5d267313f23853baaaa4c52ea621"
+uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+version = "1.1.0"
+
+[[deps.DiffRules]]
+deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
+git-tree-sha1 = "79a2aca180a85c690c58a020d47b426954b590f8"
+uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
+version = "1.16.0"
+
+[[deps.DifferentiationInterface]]
+deps = ["ADTypes", "LinearAlgebra"]
+git-tree-sha1 = "0693d8b0a4608ff289d228ab4c598df5894845cd"
+uuid = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+version = "0.7.21"
+
+    [deps.DifferentiationInterface.extensions]
+    DifferentiationInterfaceChainRulesCoreExt = "ChainRulesCore"
+    DifferentiationInterfaceDiffractorExt = "Diffractor"
+    DifferentiationInterfaceEnzymeExt = ["EnzymeCore", "Enzyme"]
+    DifferentiationInterfaceFastDifferentiationExt = "FastDifferentiation"
+    DifferentiationInterfaceFiniteDiffExt = "FiniteDiff"
+    DifferentiationInterfaceFiniteDifferencesExt = "FiniteDifferences"
+    DifferentiationInterfaceForwardDiffExt = ["ForwardDiff", "DiffResults"]
+    DifferentiationInterfaceGPUArraysCoreExt = ["GPUArraysCore", "Adapt"]
+    DifferentiationInterfaceGTPSAExt = "GTPSA"
+    DifferentiationInterfaceHyperHessiansExt = "HyperHessians"
+    DifferentiationInterfaceMooncakeExt = "Mooncake"
+    DifferentiationInterfacePolyesterForwardDiffExt = ["PolyesterForwardDiff", "ForwardDiff", "DiffResults"]
+    DifferentiationInterfaceReverseDiffExt = ["ReverseDiff", "DiffResults"]
+    DifferentiationInterfaceSparseArraysExt = "SparseArrays"
+    DifferentiationInterfaceSparseConnectivityTracerExt = "SparseConnectivityTracer"
+    DifferentiationInterfaceSparseMatrixColoringsExt = "SparseMatrixColorings"
+    DifferentiationInterfaceStaticArraysExt = "StaticArrays"
+    DifferentiationInterfaceSymbolicsExt = "Symbolics"
+    DifferentiationInterfaceTrackerExt = "Tracker"
+    DifferentiationInterfaceZygoteExt = ["Zygote", "ForwardDiff"]
+
+    [deps.DifferentiationInterface.weakdeps]
+    Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    DiffResults = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+    Diffractor = "9f5e2b26-1114-432f-b630-d3fe2085c51c"
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
+    FastDifferentiation = "eb9bf01b-bf85-4b60-bf87-ee5de06c00be"
+    FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
+    FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
+    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+    GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
+    GTPSA = "b27dd330-f138-47c5-815b-40db9dd9b6e8"
+    HyperHessians = "06b494a0-c8e0-40cc-ad32-d99506a00a6c"
+    Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+    PolyesterForwardDiff = "98d1487c-24ca-40b6-b7ab-df2af84e126b"
+    ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
+    SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+    Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
+    Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -1538,6 +1797,24 @@ weakdeps = ["PDMats", "SparseArrays", "StaticArrays", "Statistics"]
     FillArraysStaticArraysExt = "StaticArrays"
     FillArraysStatisticsExt = "Statistics"
 
+[[deps.FiniteDiff]]
+deps = ["ArrayInterface", "LinearAlgebra", "Setfield"]
+git-tree-sha1 = "5031f23e040bf17082e5b52422d77b5e844eefb1"
+uuid = "6a86dc24-6348-571c-b903-95158fe2bd41"
+version = "2.33.0"
+
+    [deps.FiniteDiff.extensions]
+    FiniteDiffBandedMatricesExt = "BandedMatrices"
+    FiniteDiffBlockBandedMatricesExt = "BlockBandedMatrices"
+    FiniteDiffSparseArraysExt = "SparseArrays"
+    FiniteDiffStaticArraysExt = "StaticArrays"
+
+    [deps.FiniteDiff.weakdeps]
+    BandedMatrices = "aae01518-5342-5314-be14-df237901396f"
+    BlockBandedMatrices = "ffab5731-97b5-5995-9138-79e8c1846df0"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
 [[deps.FixedPointNumbers]]
 deps = ["Random", "Statistics"]
 git-tree-sha1 = "59af96b98217c6ef4ae0dfe065ac7c20831d1a84"
@@ -1554,6 +1831,16 @@ version = "2.17.1+0"
 git-tree-sha1 = "9c68794ef81b08086aeb32eeaf33531668d5f5fc"
 uuid = "1fa38f19-a742-5d3f-a2b9-30dd87b9d5f8"
 version = "1.3.7"
+
+[[deps.ForwardDiff]]
+deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "LogExpFunctions", "NaNMath", "Preferences", "Printf", "Random", "SpecialFunctions"]
+git-tree-sha1 = "3b0f72e2ffef1a139ac450725c9ecd01c0a3c050"
+uuid = "f6369f11-7733-5829-9624-2563aa707210"
+version = "1.4.6"
+weakdeps = ["StaticArrays"]
+
+    [deps.ForwardDiff.extensions]
+    ForwardDiffStaticArraysExt = "StaticArrays"
 
 [[deps.FreeType]]
 deps = ["CEnum", "FreeType2_jll"]
@@ -1819,14 +2106,11 @@ deps = ["Adapt", "AxisAlgorithms", "ChainRulesCore", "LinearAlgebra", "OffsetArr
 git-tree-sha1 = "48922d06068130f87e43edef52382e6a94305ae6"
 uuid = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 version = "0.16.3"
+weakdeps = ["ForwardDiff", "Unitful"]
 
     [deps.Interpolations.extensions]
     InterpolationsForwardDiffExt = "ForwardDiff"
     InterpolationsUnitfulExt = "Unitful"
-
-    [deps.Interpolations.weakdeps]
-    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm", "CoreMath", "MacroTools", "OpenBLASConsistentFPCSR_jll", "Printf", "Random", "RoundingEmulator"]
@@ -2235,6 +2519,12 @@ version = "1.0.3"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
 
+[[deps.LsqFit]]
+deps = ["Distributions", "ForwardDiff", "LinearAlgebra", "NLSolversBase", "Printf", "StatsAPI"]
+git-tree-sha1 = "f386224fa41af0c27f45e2f9a8f323e538143b43"
+uuid = "2fda8390-95c7-5789-9bda-21331edee243"
+version = "0.15.1"
+
 [[deps.MAT]]
 deps = ["CodecZlib", "Dates", "HDF5", "OrderedCollections", "PooledArrays", "SparseArrays", "StringEncodings", "Tables"]
 git-tree-sha1 = "f407947457464f24f6cf34b744e2f86a7929a93e"
@@ -2437,6 +2727,12 @@ deps = ["AbstractFFTs", "AbstractNFFTs", "FFTW", "LinearAlgebra"]
 git-tree-sha1 = "e20ac21560b314a7c38c4cd2fdcece34c66f36b6"
 uuid = "7424e34d-94f7-41d6-98a0-85abaf1b6c91"
 version = "0.2.7"
+
+[[deps.NLSolversBase]]
+deps = ["ADTypes", "DifferentiationInterface", "Distributed", "FiniteDiff", "ForwardDiff"]
+git-tree-sha1 = "25a6638571a902ecfb1ae2a18fc1575f86b1d4df"
+uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
+version = "7.10.0"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
@@ -3266,6 +3562,7 @@ deps = ["Dates", "LinearAlgebra", "Random"]
 git-tree-sha1 = "1f0f9f401753701a7e4113b5056ca38d33875b55"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
 version = "1.29.0"
+weakdeps = ["ConstructionBase", "ForwardDiff", "InverseFunctions", "LaTeXStrings", "Latexify", "NaNMath", "Printf"]
 
     [deps.Unitful.extensions]
     ConstructionBaseUnitfulExt = "ConstructionBase"
@@ -3274,15 +3571,6 @@ version = "1.29.0"
     LatexifyExt = ["Latexify", "LaTeXStrings"]
     NaNMathExt = "NaNMath"
     PrintfExt = "Printf"
-
-    [deps.Unitful.weakdeps]
-    ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-    InverseFunctions = "3587e190-3f89-42d0-90ee-14403ec27112"
-    LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
-    Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
-    NaNMath = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-    Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[deps.UnsafeAtomics]]
 deps = ["LLVM"]
@@ -3594,6 +3882,8 @@ version = "4.1.0+0"
 # ╟─baf1b06e-cde1-11f1-8079-cdb06c39e5d7
 # ╟─baf1b082-cde1-11f1-b668-3b1531b43e4a
 # ╟─baf1b0a0-cde1-11f1-aba5-435839a66e31
+# ╟─21f16548-cee6-11f1-b7be-aae81d03624e
+# ╟─21f16598-cee6-11f1-b7be-aae81d03624e
 # ╟─baf1b0b4-cde1-11f1-8769-0fabb63ae6ad
 # ╠═baf1b0c8-cde1-11f1-a9bf-ff1a79a1f83d
 # ╟─baf1b0d2-cde1-11f1-970b-6be9f2b94639
@@ -3635,6 +3925,9 @@ version = "4.1.0+0"
 # ╟─baf1b2bc-cde1-11f1-aa83-2be32e04fc27
 # ╠═baf1b2d0-cde1-11f1-8739-97802d8973b9
 # ╟─baf1b2da-cde1-11f1-a65c-719cc7e572d3
+# ╠═21f172a4-cee6-11f1-b7be-aae81d03624e
+# ╠═21f172cc-cee6-11f1-b7be-aae81d03624e
+# ╟─21f172e0-cee6-11f1-b7be-aae81d03624e
 # ╠═baf1b2e4-cde1-11f1-8a74-ab244d433e59
 # ╠═baf1b2ee-cde1-11f1-9b09-b91331fbe843
 # ╠═baf1b302-cde1-11f1-bba2-534767550050
@@ -3642,6 +3935,7 @@ version = "4.1.0+0"
 # ╟─baf1b316-cde1-11f1-8460-776d6484a8bc
 # ╠═baf1b334-cde1-11f1-9ebf-1747f730556c
 # ╠═baf1b33e-cde1-11f1-91ff-1dd542a0b47a
+# ╟─21f180aa-cee6-11f1-b7be-aae81d03624e
 # ╟─baf1b352-cde1-11f1-98f1-bbeb37da650d
 # ╠═baf1b35c-cde1-11f1-9f2f-db6166ed703f
 # ╠═baf1b366-cde1-11f1-bc23-15efcdec0e4a
