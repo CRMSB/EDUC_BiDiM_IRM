@@ -4,3 +4,6 @@ DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 EDUC_BiDiM_IRM = "69b5d747-056c-48f8-8168-aacde1be9172"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
 PlutoSliderServer = "2fc8631c-6f24-4c5b-bca7-cbb509c42db4"
+
+[compat]
+PlutoSliderServer = "1.9.0"
