@@ -65,8 +65,7 @@ The acceleration in EPI relies on three tricks:
 This requires a more complex reconstruction that will be performed here step by step. 
 
 Here is a sequence diagram of the EPI.
-![Fig1]
-(https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPI/epi_sequence_diagram.svg?raw=true)
+![Fig1](https://github.com/CRMSB/EDUC_BiDiM_IRM/blob/main/Figures/EPI/epi_sequence_diagram.svg?raw=true)
 """
 
 # ╔═╡ 3a7a738d-129b-41a4-9a44-c9bdfcd3e180
@@ -195,7 +194,7 @@ The FFT, however, assumes that all samples are equally spaced. Applying it direc
 
 In EPI, this error also interacts with the Nyquist ghost. Odd and even lines are acquired in opposite directions: if the ramps or the timing are even slightly asymmetric, the k-space positions of the samples differ between the two groups of lines. This difference is **not linear** in x after the Fourier transform. The linear phase correction estimated from the navigators can then only remove part of the ghost, and a **residual N/2 ghost** remains.
 
-The solution is to **regrid** each line before any other processing. Knowing the gradient waveform (ramp-up time, plateau duration, ramp-down time, dwell time), we compute the true k position of every sample, then interpolate the data onto a uniform grid. Only then can the lines be reversed, the navigator phase correction applied, and the image reconstructed with a standard FFT.
+The reconstruction presented here consists in computing the true kx position of each sample from the gradient waveform and reconstructing the image directly with a non-uniform Fourier model through a regularised least-squares inversion 
 """
 
 
@@ -504,8 +503,8 @@ md"""
 
 # ╔═╡ c993e9aa-4bf8-4e8d-840c-2152d1c5a327
 md"""
-**Q6** From the information in the header, can you derive the k points astually acquired ? 
-"""|>answer_folded
+**Q6** From the information in the header, can you derive the k points actually acquired ? 
+"""|>question
 
 # ╔═╡ 65d12936-e9d4-4419-92d9-29894ba7ed14
 md"""
@@ -2746,7 +2745,7 @@ version = "1.13.0+0"
 # ╟─ce848b7e-c939-11f1-b0e6-0b6babc5505a
 # ╟─ce857734-c939-11f1-a910-9de016fca185
 # ╟─ce857766-c939-11f1-a743-c7bd01aef4da
-# ╟─ce857782-c939-11f1-b207-a90fed7c07e9
+# ╠═ce857782-c939-11f1-b207-a90fed7c07e9
 # ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
 # ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
 # ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
@@ -2775,9 +2774,9 @@ version = "1.13.0+0"
 # ╟─599d8909-7c64-402c-935a-19e956149726
 # ╟─12d399e9-44c7-49e6-a9cb-8f959e8a57ca
 # ╟─3981c376-8631-4a97-b64e-c1c0080700c5
-# ╟─2e2ef177-a866-40e1-ad45-a04d664138ea
-# ╟─c993e9aa-4bf8-4e8d-840c-2152d1c5a327
-# ╟─90fe4a55-0dd0-4880-9397-6fccb7083b26
+# ╠═2e2ef177-a866-40e1-ad45-a04d664138ea
+# ╠═c993e9aa-4bf8-4e8d-840c-2152d1c5a327
+# ╠═90fe4a55-0dd0-4880-9397-6fccb7083b26
 # ╟─65d12936-e9d4-4419-92d9-29894ba7ed14
 # ╟─16f07f14-2155-4eed-9d4e-f9e88d863678
 # ╟─1ba9ca3d-5dba-4dc2-ba42-59fcf8292cc0

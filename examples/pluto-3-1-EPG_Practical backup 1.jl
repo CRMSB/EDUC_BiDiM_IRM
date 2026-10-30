@@ -4,45 +4,36 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ ce857766-c939-11f1-a743-c7bd01aef4da
+# ╔═╡ c33b213e-7656-11f1-a001-f39f9cc685b2
 begin
-	# Layout
+	# Layout ..
 	using PlutoUI
-	using PlutoUI: Slider   # GLMakie also exports a `Slider`
+	using Random
+	using ShortCodes
 	using PlutoTeachingTools
 	using HypertextLiteral
-	using ShortCodes
-	
+	using Latexify
+
 	# Plot
 	using GLMakie
 
-	# Reconstruction
-	using MAT
-	using FFTW
-	using NFFT
-	using NFFTTools
+	#Math
 	using LinearAlgebra
-	using Statistics
 	using Random
-	using ImageTransformations
-	using CoordinateTransformations
-	using Rotations
-
+	using Statistics
+	using Distributions
 
 	PlutoUI.TableOfContents()
 end
 
-# ╔═╡ ce848b7e-c939-11f1-b0e6-0b6babc5505a
-ChooseDisplayMode()
-
-# ╔═╡ ce857734-c939-11f1-a910-9de016fca185
+# ╔═╡ c75a6f71-b75e-4269-8c80-0597bb15d96a
 html"""
 	<h1 style="text-align:center">
 		Graduate Program - Biomedical MRI
-	</h1>
+	</h1> 
 	<div style="text-align:center">
 		<p style="font-weight:bold; font-size: 35px; font-variant: small-caps; margin: 0px">
-			Lesson 4-1: Intra-scan motion correction
+			Lesson 3: The Extended Phase Graph framework
 		</p>
 		<p style="font-size: 30px; font-variant: small-caps; margin: 0px">
 			Nadège Corbin
@@ -53,694 +44,1130 @@ html"""
 	</div>
 """
 
-# ╔═╡ ce857782-c939-11f1-b207-a90fed7c07e9
-md"""
-# Introduction
-MRI is slow! Couples of seconds, even minutes can be spent to acquire only one 3D image. A lot can happen during this acquisition time. That's why MRI is very sensititive to motion. The phase-encoded directions are particularly affected by motion because the time between two phase-encoded lines is long compared to two points in the frequency-encoded direction. 
-"""
+# ╔═╡ 95e43cd5-9266-4eff-ad38-ab2393985ffd
+md"
 
-# ╔═╡ 3a7a738d-129b-41a4-9a44-c9bdfcd3e180
-md"""
-# 1. Load the data 
-"""
-
-# ╔═╡ ce85778e-c939-11f1-a186-e98bf7b3f0a9
-md"""
-
-The dataset of this session is a 2D axial brain slice. The k-space is **fully sampled** on a Cartesian grid. The file contains `im`: the image, size $N_x \times N_y \times N_c$
-
-
-!!! warning "Path to the data"
-    The file `brain_1ch.mat` is expected in `ressources/data/`. Change `data_path` below if you stored it somewhere else.
-"""
-
-# ╔═╡ ce8577a2-c939-11f1-a52f-4f78ed5cd323
-data_path = joinpath(@__DIR__, "..", "ressources", "EDUC_k-space-main","data", "brain_1ch.mat")
-
-# ╔═╡ ce8577b6-c939-11f1-8693-11da8d5aab7f
-md"""
-> - The original header of the acquisition is not available. We will **assume an in-plane pixel size of 1 mm × 1 mm**.
->  - The phase-encoding direction is x. 
->  - The frequency encoding direction is y. 
-"""
-
-# ╔═╡ ce85782e-c939-11f1-bff0-ef3fa59f69b9
-begin
-	vars = matread(data_path)
-	ima = vars["im"]
-	
-	Nx, Ny = size(ima)
-	FOV = (Nx, Ny) .* 1  
-end
-	
-
-# ╔═╡ ce8577de-c939-11f1-a210-174d90077116
-begin
-	"Centered 2D inverse FFT along dimensions 1 and 2 : k-space → image"
-	ifft2c(k) = fftshift(ifft(ifftshift(k, (1, 2)), (1, 2)), (1, 2))
-end
-	
-
-# ╔═╡ 3f203e31-8624-4aea-b1e2-faecc9d12c80
-begin
-"Centered 2D FFT along dimensions 1 and 2 : image → k-space"
-	fft2c(x) = fftshift(fft(ifftshift(x, (1, 2)), (1, 2)), (1, 2))
-end
-
-# ╔═╡ ce8577d4-c939-11f1-ae8b-c7f121718b79
-md"""
-# 2. Motion artefacts
-For educational purposes, we will simulate a motion that occurs during the acquisition of the data. 
-
-## 2.1 Movement
-Object motion frequently occurs during data acquisition. To simulate this intra-scan motion—comprising 2D translation and/or rotation—we employ the following function. The simulation proceeds iteratively: the image is transformed, its k-space representation is generated, and a single line of k-space data is extracted. This transformation and extraction process is then repeated with updated motion parameters for each subsequent line.
-"""
-
-# ╔═╡ 6e0f5aaf-9af1-497a-a9e9-361c0e11b43c
-begin
-"Corruption of an image with rotation or/and translation"
-function simulate_motion_kspace(img, trans_x,trans_y,rot) 
-    
-    rows, cols = size(img)
-    
-    kspace_corrupted = zeros(ComplexF64, rows, cols)
-    
-    for i in 1:rows
-        theta = deg2rad(rot[i])
-        dx = trans_x[i]
-        dy = trans_y[i]
-        
-        #  (Translation + Centered Rotation )
-        c = center(img)
-        tfm = recenter(RotMatrix(theta), c) ∘ Translation(dx, dy)
+# 1. Introduction to EPG
+Isochromat-based simulations are really intuitive but require the simulation of many isochromats for optimum accuracy. This can be extremely time and memory consuming. The Extended Phase Graph approach is a more efficient alternative. 
  
-        # apply the transform for the time t (line i)
-        img_moved = warp(img, tfm, axes(img), fillvalue=0)
+"
 
-       
-        # 2D fourier transform
-        K_temp = fft2c(img_moved)
-        
-        # Extract line i of the k-space
-        kspace_corrupted[i, :] = K_temp[i, :]
-    end
-    
-    # inverse fouriertransform to obtain the corrupted image
-    img_corrupted = abs.(ifft2c(kspace_corrupted))
-    
-    return img_corrupted, kspace_corrupted
-end
-    
-end
 
-# ╔═╡ 1f4777bc-a37a-486c-ba88-7ffb4944a9b4
-md"""
-## 2.2 Pulsatile artefact
-Even though the brain is not moving, blood is circulating. The signal inside the vessel varies over the cardiac cycle because the blood flow is pulsatile. Spins in static tissue are partially saturated by the repeated RF pulses. Blood flowing into the slice brings fresh, fully magnetized spins that give a stronger signal. During systole the velocity is high, so more fresh spins enter the slice between excitations and the vessel appears brighter. During diastole the flow is slower, the blood stays longer in the slice, becomes saturated, and its signal drops.
-"""
+# ╔═╡ 9fd5b724-4634-4fd9-b397-bc1e8161394d
+md"
+**Additionnal educational ressources :**
 
-# ╔═╡ 5bebe206-d3e9-4812-b6c0-f8ae279b6f78
+A really good presentation of the EPG framework is available in **Lecture-04 from Stanford Rad229 course** by Dr. Daniel Ennis & Brian Hargreaves. This practical is largly inspired from theses lectures. 
+"
+
+# ╔═╡ c3d72b3f-1467-46fa-a964-387c625fcd2f
+YouTube("bskhnaoJVNY")
+
+# ╔═╡ c0f34433-f007-4a7f-b2e8-d33f14bd7a67
+
+
+# ╔═╡ 9eede586-5ede-431e-be8c-8dc1a4869b5c
+md"
+## 1.1. Visualization  
+
+Let's focus on one voxel and look at one spatial direction (d) in this voxel.
+
+In this voxel, along this direction,  many isochromats are present. 
+Let's imagine the isochromats have all just been flipped into the transverse plane with an RF pulse.  
+
+"
+
+# ╔═╡ feb49760-e9de-4738-82cb-d2fa9c8b1376
 begin
-"Corruption of the data with varying signal intensity in a vessel"
-function simulate_pulse_kspace(ima,vessel, intensity) 
-    
-    rows, cols = size(ima)
-    ima_vessel=ima+vessel;
-    kspace_corrupted = zeros(ComplexF64, rows, cols)
-    img_corrupted = zeros(Float64,rows, cols)
-    
-    for i in 1:rows
- 
-        # change intensity of image
-        vessel_moved = vessel.*intensity[i];
-        ima_vessel_moved=vessel_moved+ima;
-       
-        # Fourier transform of the moved image
-        K_temp = fft2c(ima_vessel_moved)
-        
-        # Extract line i
-        kspace_corrupted[i, :] = K_temp[i, :]
-    end
-    
-    # Inverse Fourier Trannsform
-    img_corrupted = abs.(ifft2c(kspace_corrupted))
-    
-    return img_corrupted, kspace_corrupted
+  function visuMxy(Mxy)
+     f = Figure()
+      
+      N=25 # number of isochromats
+      
+      # transverse magnetization 
+	     ax1=Axis3(f[1,1],title = "Transverse ",xlabel="Mx",ylabel="My",zlabel="Position along d")
+	  
+      pos=LinRange(0,1,N)
+      zs=pos;
+      xs=zeros(length(pos))
+      ys=zeros(length(pos))
+
+      dz=zeros(length(pos))
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax1,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax1,(-1,1))
+	     ylims!(ax1,(-1,1))
+	   zlims!(ax1,(0,1))
+      f
+  end
+
+    Mxy_1(p)=1;
+
+    visuMxy(Mxy_1)
+
 end
-    
-end
 
-# ╔═╡ ce857914-c939-11f1-ac3e-09bdb3a2341f
+
+
+# ╔═╡ 4cecb481-e70f-4ed6-8a16-90ba400eed97
 md"""
-# 3. K-space corruption
-The motion occurs during the k-space sampling. Let's see how translation and rotation look in the k-space.
+In that case, they are in phase.
+Now let's imagine we have applied a gradient in this direction. 
+Such that there is 2$\pi$ between the first and the last isochromat. 
 """
 
-# ╔═╡ 4974b708-e9db-4214-82d9-966c52230bd9
+# ╔═╡ 090d5994-6e13-4178-b0ab-ef62e1e0258d
 md"""
-## 3.1 Rotation
+Those two previous configurations are the basis functions of $F_0$ and  $F_1$, some EPG states. Now when we will talk about $F_0$ and $F_1$, we will know that we will be talking about the population of isochromats following this organization without describing each isochromat independently.
 """
 
-# ╔═╡ 10f8f35f-f43b-4054-b3fb-ad12925a668f
-md"""
-## 3.2 Translation
-"""
 
-# ╔═╡ ce857978-c939-11f1-adf3-c3c0894ef2f2
-md"""
-# 4. Motion correction 
-
- Because the Fourier transform turns rigid-body transformations into simple operations in k-space, rigid motion can be corrected directly on the raw data, line by line, provided the motion parameters for each phase-encoding line are known (from navigator echoes, an external tracking system, or a retrospective estimation). A translation $d\mathbf{x}_0(t)$ appears only as a linear phase ramp, $M(\mathbf{k}) e^{-i 2\pi \mathbf{k}\cdot d\mathbf{x}_0(t)}$, so it is undone exactly by multiplying each acquired line by the conjugate phase, $e^{+i 2\pi \mathbf{k}\cdot d\mathbf{x}_0(t)}$. This brings all lines back to a common reference position without any interpolation. A rotation $R(t)$ instead rotates the k-space itself, $M(\mathbf{k}) \rightarrow M(R(t)\mathbf{k})$, so each line was in fact sampled along a rotated trajectory. Correcting it means applying the inverse rotation to the sampling coordinates, which puts the samples on a non-Cartesian grid.
-
-"""
-
-# ╔═╡ 74504ba7-0e74-4482-95eb-8a019bdb27a0
-md"""
-## 4.1 Correct for translation 
-
-It is easier to correct for translation because only a phase ramp needs to be added, so let's try to correct the image corrupted with translation and go back to the original image. 
-
-
-"""
-
-# ╔═╡ 9d03e74b-9ec2-49a7-8bce-bffabc2b49a2
+# ╔═╡ f0697055-ac59-4906-925c-c25233d85bae
 begin
-    function correct_translation(ksp_corrupted,trans_x,trans_y)
-        Nx,Ny=size(ksp_corrupted)
-        ksp_corr = zeros(ComplexF64,Nx,Ny)
-        kx = (0:Nx-1) .- Nx ÷ 2             
-        ky = ((0:Ny-1) .- Ny ÷ 2)'         
-       for i in 1:Nx                       # ligne i = acquise à l'instant tᵢ
-            dx = trans_x[i]                 # déplacement de l'objet pendant cette ligne (pixels)
-            dy = trans_y[i]
+  function visuMxy2D(Mxy)
+     f = Figure()
+      
+      N=25 # number of isochromats
+      
+      # transverse magnetization 
+	     ax=Axis(f[1,1],title = "Transverse ",xlabel="Mx",ylabel="My")
+	  
+      pos=LinRange(0,1,N)
+      xs=zeros(length(pos))
+      ys=zeros(length(pos))
 
-            for j in 1:Ny                   # échantillon j le long de la ligne
-            # Phase introduite par la translation : 2π (kx·dx/Nx + ky·dy/Ny)
-            phase = 2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
 
-            # On la retire en multipliant par la phase conjuguée e^{-iφ}
-            ksp_corr[i, j] = ksp_corrupted[i, j] * exp(-im * phase)
-            end
-        end
-        img_corr = abs.(ifft2c(ksp_corr))
-        return img_corr
-    end
+      color_map_attribute=pos;
+      
+      arrows3d!(ax,xs,ys,dx,dy,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax,(-1,1))
+	     ylims!(ax,(-1,1))
+      f
+  end
+
 end
 
-# ╔═╡ 9e94dc41-0719-4da3-aa32-b13e7f7658c4
+
+# ╔═╡ e0b63072-46d2-4cf1-9e86-68658977f438
 md"""
-## 4.2 Correct for rotation 
-
-It is much more complicated to correct for rotation even though the equation looks simpler. The difficulty comes from the fact that the rotated k-space might does not fit in the original cartesian grid. A non uniform fourier transform is therefore required.
-
+However, it's not easy to represent a dephasing of more than $$$2\pi$$$ with the 2D representation, that's why we tend to use the 3D view with spatial location on the third axis more often. 
 """
 
-# ╔═╡ 9db04e02-47ec-4410-bca1-76634c04d2e0
+# ╔═╡ 3c9b9f6f-f117-4513-8a82-8bafcaacee64
+begin
+    function visuMz(Mz)
+        f=Figure()
+            N=25
+      # longitudinal magnetization 
+      ax2=Axis3(f[1,1],title = "Longitudinal",xlabel="Position along d",ylabel="",zlabel="Mz")
+	  
+      pos=LinRange(0,1,N)
+      xs=pos;
+      ys=zeros(length(xs))
+      zs=zeros(length(xs))
+
+      dx=zeros(length(xs))
+      dy=zeros(length(xs))
+      dz=Mz.(xs)
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax2,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax2,(0,1))
+	     ylims!(ax2,(-1,1))
+	   zlims!(ax2,(-1,1))
+      f
+  end
+         
+end
+
+# ╔═╡ 209e3560-56d0-4f97-8d47-d2fb30c6a145
+md"""
+Those two previous configurations are the basis functions of $Z_0$ and $Z_1$.
+"""
+
+# ╔═╡ 8a41e907-2d6e-4fba-b750-bde13f044ed7
+md"""
+## 1.2. Formalization
+"""
+
+# ╔═╡ cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
+md"""
+  $F_n$ and $Z_n$ are the coefficients, but we sometimes use them to refer to the basis functions they multiply. 
+	
+"""|> warning_box
+
+# ╔═╡ 07bfc15b-24c8-44e4-932f-6e19d8eab264
+md"""
+## 1.3. Examples
+"""
+
+# ╔═╡ 9ca8976b-6ed4-4670-ab53-a1c65f0a628a
+begin
+    function visuClassic(Mxy,Mz)
+        f=Figure()
+            N=25
+     
+      ax=Axis3(f[1,1],title = "Classic View",xlabel="Mx",ylabel="My",zlabel="Mz")
+	  
+      pos=LinRange(0,1,N)
+      xs=zeros(length(pos));
+      ys=zeros(length(pos))
+      zs=zeros(length(pos))
+
+      dx=real(Mxy.(pos))
+      dy=imag(Mxy.(pos))
+      dz=Mz.(pos)
+
+      color_map_attribute=pos;
+      
+      arrows3d!(ax,xs,ys,zs,dx,dy,dz,tiplength=0.1,tipradius=0.04,shaftradius=0.02,color=color_map_attribute,colormap= :jet)
+      xlims!(ax,(-1,1))
+	     ylims!(ax,(-1,1))
+	   zlims!(ax,(-1,1))
+      f
+  end
+
+         
+end
+
+# ╔═╡ b7d18ce7-56ee-4924-8142-83e0cbfae698
+md"""
+Note that several states with different _n_ can exist together! 
+"""
+
+# ╔═╡ 2e2a2750-fa16-437b-b313-6b20e966e814
 begin 
-function correct_rotation(ksp, rot) 
-    rot_rad=rot.*pi/180
-    Nx, Ny = size(ksp)
-    kx = (0:Nx-1) .- Nx ÷ 2                
-    ky = (0:Ny-1) .- Ny ÷ 2
+	
+	function fromFtoM(Q)
+		N=size(Q,2)
+		Mxy=p -> Q[1,1]
+		Mz=p -> Q[3,1]
+		for n in 2:N
+			Mxy_old=Mxy
+			Mxy= p -> Mxy_old(p)+Q[1,n]*exp(2*im*pi*(n-1)*p)+conj.(Q[2,n])*exp(-2*im*pi*(n-1)*p)
 
-    nodes = zeros(2, Nx * Ny)
-    for j in 1:Ny, i in 1:Nx                  
-        c, s = cos(rot_rad[i]), sin(rot_rad[i])
-        kxr = c * kx[i]/Nx - s * ky[j]/Ny          
-        kyr = s * kx[i]/Nx + c * ky[j]/Ny
-        nodes[:, i + (j - 1) * Nx] .= (kxr, kyr)   # normalised to [-0.5, 0.5)
-    end
-
-    keep  = vec(all(-0.5 .<= nodes .< 0.5, dims = 1))       # drop samples rotated out of the grid
-    data  = ComplexF64.(vec(ksp))[keep]
-    p     = plan_nfft(nodes[:, keep], (Nx, Ny))
-
-     # Density compensation (Pipe–Menon iterations)
-    w = ones(ComplexF64, count(keep))
-    for _ in 1:10
-        w ./= abs.(p * (adjoint(p) * w))
-    end
-
-    img_corr = adjoint(p) * (data .* w)             # gridding reconstruction
-    img_corr= img_corr ./ (Nx * Ny) .* (count(keep) / sum(real, w))  # rough intensity rescaling
-
-
-    return img_corr
-end
+			Mz_old=Mz
+			Mz= p -> Mz_old(p)+2*Q[3,n]*exp(2*im*pi*(n-1)*p)
+		end
+		Mz_final=Mz
+		Mz=p->real(Mz_final(p))
+		return Mxy,Mz
+	end
 end
 
-# ╔═╡ b33cd29e-7a0e-4747-aa4f-16f40f1bea72
+
+# ╔═╡ 34f5d1f9-3add-44d8-ad05-4acb08921d82
 md"""
->⚠️Ideally, density compensation function should be used with the nufft. For simplicity, it is not implemented here. 
+## 1.4. Interim conclusion
+The EPG framework is a method to simulate MR signal efficiently. 
+
+With the EPG framework we assume that gradient areas are quantized into units that give a phase twist of one cycle across a voxel so that we can easily represent large groups of isochromats with a simple Fourier basis and accurately calculate MR signals.
+
+Multiple implementation of the EPG framework exist:
+- MRZero (https://mrsources.github.io/MRzero-Core/) **Python**
+- EPG-X (https://github.com/mriphysics/EPG-X) **MATLAB**
+- Sycomore (https://sycomore.readthedocs.io/en/latest/) **Python**
+- EPGSim (https://github.com/MagneticResonanceImaging/EPGsim.jl) **Julia**
+- ...
+
+In this section we described the fundamentals of the EPG framework and developped intuition about the concept of states. 
+
+In the next session, we will explore how RF pulses, gradients, and relaxation phenomena are modeled within the EPG framework."
 """
 
-# ╔═╡ 3824b2f4-f792-4e89-8750-7950417e8493
+# ╔═╡ 07344fa6-7082-4cf9-a0ac-1c6230d967c2
+md"
+
+# 2. Basic operators in EPG 
+Now we know how to describe any distribution of isochromats with the Q matrix which gives a coefficient for each state. How can we now modify this configuration? What is the effect of the relaxation, the precession, an RF pulse or  a gradient on the Q matrix ?  
+"
+
+# ╔═╡ 8add0d61-2a42-49e4-927a-c0b1132503f5
+YouTube("kToL-9ZTzCs")
+
+# ╔═╡ 63cb3219-59e0-4413-bb0a-ab65a0217a84
 md"""
-## 4.2 Correct for both  
+## 2.1 Precession 
+
+Precession is a simple rotation of $\theta$ about the Z axis:
+
+
+$$\begin{equation}
+\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix} =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix} 
+\end{equation}$$
+
+
+By linearity of the Fourier transform:
+
+$$\begin{equation}
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} 
+\end{equation}$$
+
+and therefore more concisely:
+
+$$\begin{equation}
+Q =  
+\begin{bmatrix} 
+e^{i\theta} & 0 & 0  \\ 
+0 & e^{-i\theta} & 0\\ 
+0 & 0 & 1 
+\end{bmatrix} 
+Q
+\end{equation}$$
+
+
 """
 
-# ╔═╡ f66d9ef4-8f6b-42dc-8c06-2c208ae2d962
-begin 
-function correct_motion(ksp, trans_x, trans_y, rot) 
-    rot_rad=rot.*pi/180
-    Nx, Ny = size(ksp)
-    ksp_corr=zeros(ComplexF64,Nx,Ny)
-    
-    kx = (0:Nx-1) .- Nx ÷ 2                
-    ky = (0:Ny-1) .- Ny ÷ 2
+# ╔═╡ a8a706b8-5063-4997-b454-2cc915a1d3ed
+md"""
 
-   
-    for i in 1:Nx                       # ligne i = acquise à l'instant tᵢ
-            dx = trans_x[i]                 # déplacement de l'objet pendant cette ligne (pixels)
-            dy = trans_y[i]
+## 2.2 Gradients 
+ Gradients induce one cycle ($2\pi$) of phase across a voxel. 
+ Therefore, applying a _unit_ gradient results in : 
+- shifting the magnetization in $F_n^+$ into $F_{n+1}^+$ (*Dephasing*)
+- **AND** shifting the magneztization in $F_n^-$ into $F_{n-1}^-$ (*Rephasing*)
+Note that applying a gradient does not affect Z states. 
 
-            for j in 1:Ny                   # échantillon j le long de la ligne
-            # Phase introduite par la translation : 2π (kx·dx/Nx + ky·dy/Ny)
-            phase = 2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
+If the gradient applied induces $p*2\pi$ dephasing, the magnetization moved from $F_n^+$  to $F_{n+p}^+$ and from $F_n^-$ to $F_{n-p}^-$. 
+"""
 
-            # On la retire en multipliant par la phase conjuguée e^{-iφ}
-            ksp_corr[i, j] = ksp[i, j] * exp(-im * phase)
-            end
-    end
-    
-    nodes = zeros(2, Nx * Ny)
-    for j in 1:Ny, i in 1:Nx                  
-        c, s = cos(rot_rad[i]), sin(rot_rad[i])
-        kxr = c * kx[i]/Nx - s * ky[j]/Ny          
-        kyr = s * kx[i]/Nx + c * ky[j]/Ny
-        nodes[:, i + (j - 1) * Nx] .= (kxr, kyr)   # normalised to [-0.5, 0.5)
-    end
+# ╔═╡ e3fa2fc9-443f-4590-bfc2-32c346c70b4d
+md"""
 
-    keep  = vec(all(-0.5 .<= nodes .< 0.5, dims = 1))       # drop samples rotated out of the grid
-    data  = ComplexF64.(vec(ksp_corr))[keep]
-    p     = plan_nfft(nodes[:, keep], (Nx, Ny))
+## 2.3 Relaxation 
+Relaxation  over the time T is both an attenuation of the states:
+-  $F_n^+$  and $F_n^-$ are multiplied by the attenuation factor $e^{-T/T_2}$ 
+-  $Z_n$ are multiplied by the attenuation factor $e^{-T/T_1}$
+And also a recovery of the state $Z_0$ which becomes $M_0(1-e^{-T/T_1})+Z_0exp(-T/T_1))$
 
-    img_corr = adjoint(p) * (data)
-    img_corr= img_corr ./ (Nx * Ny)  # rough 
+"""
 
-    return img_corr
+# ╔═╡ cd4c5b9d-4e23-48d1-afa1-781d86563a1f
+md"""
+## 2.4 RF pulse
+
+A radiofrequency pulse (with a flip angle of $\alpha$ and a phase of $\phi$) only mixes states of the same order:
+
+
+$$\begin{equation}
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} =  
+\begin{bmatrix} 
+cos^2(\alpha/2) & e^{2i\phi}sin^2(\alpha/2) & -ie^{i\phi}sin \alpha  \\ 
+e^{-2i\phi}sin^2(\alpha/2) & cos^2(\alpha/2) & ie^{-i\phi}sin(\alpha)\\ 
+-i/2e^{-i\phi}sin(\alpha) & i/2e^{i\phi}sin(\alpha) & cos(\alpha) 
+\end{bmatrix} 
+\begin{bmatrix} 
+F^+_n \\ 
+F^-_n \\ 
+Z_n 
+\end{bmatrix} 
+\end{equation}$$
+
+
+This is the same rotation matrix as for $\begin{bmatrix} 
+M_{xy} \\ 
+M_{xy}^* \\ 
+M_z 
+\end{bmatrix}$.
+
+"""
+
+
+
+# ╔═╡ 0bbfc3dc-0e4b-498f-a966-50d46d31956f
+begin
+	function applyRF(alpha,phi)
+	R=[cos(alpha/2)^2 exp(2*im*phi)*sin(alpha/2)^2 -im*exp(im*phi)*sin(alpha);
+		exp(-2*im*phi)*sin(alpha/2)^2 cos(alpha/2)^2 im*exp(-im*phi)*sin(alpha);
+		-im/2*exp(-im*phi)*sin(alpha) im/2*exp(im*phi)*sin(alpha) cos(alpha)]
+	return R
 end
 end
 
-# ╔═╡ c8f88fe3-6bb6-4d6e-88cf-10387e7acd7f
+# ╔═╡ 4b629172-2340-4dab-a73a-0aabbea61011
 md"""
-# Discussion and Conclusion
-Intra-scan motion correction is possible in the k-space, but requires the knowledge of the motion that occured. Two methods can be used:
-- **external device** : a camera within the bore records the displacement of a marker located on the object 
-- **from the data**: it is sometimes possible to extract motion parameters from the data, we can reconstruct a profile or a very undersampled imaage every TR and estimate the motion from this series. 
+First let's draw the initial configuration.
+"""
 
-The intra-scan motion correction is generally limited to rigid motion:
-- **Rotation** in the image domain is the same rotation in the k-space
-- **Translation** in the image domain is phase ramp in the k-space
+# ╔═╡ 34270e18-f966-49bb-9a0c-d39272ecbd43
+md"""
+A longitudinal component with the initial phase twist has been created, $Z_1$ is therefore populated. 
+"""
 
-Breathing-induced motion is usually not a rigid transform, different organs move independently and their shape might even change. It is much more complicated to correct for intra-scan motion in the case of non-rigid deformation. This would require iterative approaches with very complex models. 
+# ╔═╡ 1baac32b-9472-48e4-bcd9-19bf34735784
+md"""
+A transverse component remains which now has an elliptical distribution and the same phase twist,which corresponds to the sum of the population in state $F_1^+$ and $F_1^-$ (as explained before)
+"""
 
-To avoid the pulsatile artefact or the breathing artefact, or simply to do cardiac imaging, motion correction a posteriori is generally not performed. It is more common to trigger the acquisition on the heart beat or the respiration at the cost of longer acquisition time. Breath-holding is even more common in clinics.
+# ╔═╡ 055cf6ac-2855-4f29-acbb-583d9a415d82
+md"""
+## 2.5 Interim conclusion 
+"""
 
-It is also possible to use sequences less sensitive to motion. Radial sampling for instance is more robust to motion as the center of the k-space is sampled every TR. Even though motion does not induce ghosting artefacts in that case, it can result in blurring effect. 
+# ╔═╡ 5a11e3bb-1309-4689-9d2a-7d9e85765abb
+md"""
+Other phenomena like diffusion or magnetization transfer can be simulated with the EPG framework. 
+- Diffusion: [Weigel,JMR,2010](https://pubmed.ncbi.nlm.nih.gov/20542458/)
+- Magnetization Transfer: [Malik,MRM,2017](https://onlinelibrary.wiley.com/doi/full/10.1002/mrm.27040)
+
+The next section consists in simulating RF pulse sequences with the EPG framework. 
+"""
+
+# ╔═╡ c33841ff-c67a-49ca-bcef-d05a5ac3d842
+md"""
+ # 3. Simulation of MRI sequences
+ ## 3.1. Multi-echo spin-echo 
+Let's start with a multi echo spin-echo sequence
+![Fig1]
+(https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig1.png?raw=true)
+"""
+
+# ╔═╡ bb5d8129-8f07-40a8-8527-26bb53ab7d3f
+begin
+	function MESE(alpha,phi,N,TE,T1,T2,dispfig)
+		
+		fig = Figure(size=(900,800*ceil(Int,N/4)))
+
+		#initialization
+		S=zeros(Float64,N)
+		Time=zeros(Float64,N)
+		Q=zeros(ComplexF64,3,N)
+		R=zeros(ComplexF64,3,3)
+		Rrefoc=zeros(ComplexF64,3,3)
+		Q[3,1]=1;
+	
+		
+		#RF pulse
+		R=applyRF(pi/2,0);
+		Q=R*Q;
+	
+		for ec in 1:N
+
+			#Relaxation
+			Q=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q;
+			Q[3,1]=Q[3,1]+(1-exp(-(TE/2)/T1))
+			
+			if dispfig==1
+			ax=Axis(fig[ec,1],ylabel="n",title=" Before Crush; Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = Q[r, c]
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			#Crusher
+			Q[1,:]=circshift(Q[1,:],1)
+			Q[2,:]=circshift(Q[2,:],-1)
+			Q[1,1]=conj(Q[2,1])
+			Q[2,end]=0;
+
+			if dispfig==1
+			ax=Axis(fig[ec,2],ylabel="n",title=" After Crush, Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			# refocussing pulse 
+			Rrefoc=applyRF(alpha,phi);
+			Q=Rrefoc*Q;
+			
+			
+			if dispfig==1
+			ax=Axis(fig[ec,3],ylabel="n",title=" After 180 , Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+	
+			# Crusher
+			Q[1,:]=circshift(Q[1,:],1)
+			Q[2,:]=circshift(Q[2,:],-1)
+			Q[1,1]=conj(Q[2,1])
+			Q[2,end]=0;
+
+			if dispfig==1
+			ax=Axis(fig[ec,4],ylabel="n",title=" After Crush; Ec $ec")
+			ax.xticks=([1,2,3],["F+","F-","Z"])	
+			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:N
+    			val = (Q[r, c])
+    			# White text on dark pixels, Black text on bright pixels
+    			txt_color = abs(val) > 0.2 ? :black : :white
+				text!(ax, r, c-1, text=string(round(abs(val), digits=2)), align=(:center, :center), color=txt_color, fontsize=14,
+        		font=:bold)
+			end
+			end
+			
+			#Relaxation
+			Q=[exp(-(TE/2)/T2) 0 0; 0 exp(-(TE/2)/T2) 0; 0 0 exp(-(TE/2)/T1)]*Q;
+			Q[3,1]=Q[3,1]+(1-exp(-(TE/2)/T1))
+
+			#Readout
+			S[ec]=abs.(Q[1,1]);
+			Time[ec]=ec*TE;		
+			
+		end
+		return Q,S,Time,fig;
+	end
 
 
-If you want to know more about motion artefacts, a great lecture is available from the RAD229 course of Stanford.
+end
+
+# ╔═╡ 0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+md"""
+It might be a bit complicated to interpret the EPG matrices. It is common to use another tool named "Coherrence pathways graph". The purpose is not to compute all the coefficients for all states at different times but to see the pathway of the populations of isochromats throughout the MRI sequence. As an example, let's look at the coherence pathway diagram of the multi-echo spin-echo with perfect refocussing pulse. 
+
+![Fig2](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig2.png?raw=true)
+
+**Interpretation**: 
+The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$,the perfect refocussing pulse entirely moves this population into $F_1^-$, which is then moved back into $F_0$ by the second crusher, this is the first echo. Next echoes are created the same way.
+
+Now let's look at the case where refocussing pulses are imperfect. 
+![Fig3](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Fig3.png?raw=true)
+
+**Interpretation**: 
+- The primary echo pathway (in red) still exists, but other pathways also contribute to the echo formation. 
+- Blue pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse leaves $F_1+$ not empty. The second crusher moves this residual population to $F_2^+$. The following cusher moves this population to $F_3^+$. A part of this population is then moved to $F_3^-$ by the following refocussing pulse. Three crushers later, this populations moves back to $F_0$ to contribute to the third echo. 
+- Green pathway: The state $F_0$ is created by the excitation, the first crusher moves this population into $F_1^+$, the imperfect refocussing pulse moves a part of thi spopulation into $Z_1$. This sub-population stays there until the next refocussing pulse, which moves a part of this state into $F_1^-$. The following crusher moves this residual population into $F_0$ to contribute to the second echo. This is callled a **stimulated echo**. 
 
 """
 
-# ╔═╡ 7272b9f1-97bc-4cc6-9f4f-078219220b8c
-YouTube("9UUkgMo1m5c")
+# ╔═╡ 89458e61-c069-439e-a5bb-bc007d842af1
+md"""
 
-# ╔═╡ ce857c34-c939-11f1-8a90-dbf15df7b4a9
+## 3.2 Steady state sequences
+Let's now focus on steady-state sequences. Their specificity is their short TR. This means that the transverse component has not vanished before the next excitation. Two alternatives are then available: 
+- Reuse the transverse magnetization
+- Or "destroy" it
+
+We will first focus on the second option. 
+
+### 3.2.1 Spoiled gradient echo 
+
+In theory, if we completely destroy the transverse magnetization at the end of each TR, the signal is :
+
+$\begin{equation} S = \rho \frac{1 - e^{-TR/T1}}{1 - \cos(\alpha) e^{-TR/T1}} \sin(\alpha) \end{equation}$
+
+Two spoiling techniques are employed to limit the contribution of the transverse component across excitations: 
+- Gradient spoiling: Rephasing and spoiling are merged together to impose a \$2\pi\$ dephasing at the end of the TR. 
+- RF spoiling: the phase of the RF pulse is constantly changing from TR to TR such as $\phi(n)=(\phi_0/2)(n+1)n$
+
+Here is the pulse sequence diagram of the spoiled gradient echo. 
+![Fig4](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/spoiledGRE.png?raw=true)
+
+"""
+
+
+# ╔═╡ c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
+md"""
+ Here is the signal amplitude for each spoiling increment from 0 to 180°. 
+"""
+
+# ╔═╡ 245aae0e-cba5-465f-a5b1-3443da3247f5
+md"""
+### 3.2.2 Balanced steady-state free precession 
+Instead of discarding the transverse magnetization, one can reuse it in order to maximize the signal to noise ratio. This is the concept of the bSSFP. Here is the sequence diagram of the bSSFP sequence: 
+![Fig5](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/bSSFP.png?raw=true)
+
+- No spoiler or RF spoiling is used. 
+- TE is half the TR.
+- The readout gradient (and all the others) is completely balanced. 
+"""
+
+# ╔═╡ 7afc5069-a10f-435a-8f1f-277821ff6b72
+md"""
+In the case of inhomogeneous B0, this translates into banding artefacts in the image. On-resonance regions will have almost no signal compared to the others. 
+![FigBandingArtefact](https://github.com/nadegecorbin/EDUC_BiDiM_IRM/blob/main/Figures/EPG/Bandingartefact.png?raw=true)
+_Figure from Miller,2012, Neuroimage DOI:10.1016/j.neuroimage.2011.10.040_
+"""
+
+# ╔═╡ 5eb70803-f9bd-4073-b990-0ea723d9cb45
+md"""
+
+### 3.3 Interim conclusion 
+
+The EPG framework is a powerful tool to simulate the MR signal. 
+In a couple of lines, it is easy to implement the basic MRI operators and simulate the most common sequences like multi-echo spin-echo, spoiled gradient echo and balanced steady-state sequences.
+
+Here are some interesting videos about these sequences: 
+"""
+
+
+# ╔═╡ 8e934f39-a170-4766-8f8b-50e9b559a67d
+YouTube("rp3rwuZlPyU")
+
+# ╔═╡ b4da11f5-b126-4bf8-8e4c-1d44ea22823c
+YouTube("6wAuxKf1GhQ")
+
+# ╔═╡ f797b917-7a76-443a-8154-3bc1b047f928
+YouTube("qrJ6GQAyuY0")
+
+# ╔═╡ 8faec62d-8380-4b2a-8440-2040e132e98c
+md"""
+ # Conclusion 
+The extended phase graph algorithm is a framework composed of $F_n$ and $Z_n$ basis representing many isochromats in a voxel 
+Events of a pulse sequence are simple operations on $F_n$ and $Z_n$. 
+The signal at any timee is $F_0$ as all others n states are dephased. 
+The matrix formulation allows easy implementation. Multiple impementations are already freely available.
+
+Coherence pathways diagram can also be used to better visualize formation of echoes. 
+
+In this course, we mentioned phenomena like excitation, relaxation, precession, gradient application. The flexibility of the EPG framework also enables the simulation of:
+- the diffusion effect  (Weigel,2015,JMRI, DOI:10.1002/jmri.24619)
+- multiple gradient directions and gradient amplitude (Weigel,2010,JMR, DOI:https://doi.org/10.1016/j.jmr.2010.05.011)
+- mutiple pool modelling (Malik, 2018,MRM DOI: 10.1002/mrm.27040)
+
+"""
+
+# ╔═╡ e6feb149-6c5e-4473-9512-cb8361cf1a46
+md"""
+ # Next
+"""
+
+# ╔═╡ 490b4cf7-4bfe-4893-89e4-3beb825a7960
 md"""
 # Helper functions
 """
 
-# ╔═╡ ce857c48-c939-11f1-b7d9-25caffb70cd2
+# ╔═╡ 54e96133-f840-41ee-bac5-db8dc7c196f3
 begin
-	"Pixel center coordinates (mm) of a matrix of size `n` with a field of view `fov`, 0 at index n÷2+1"
-	pixcoords(n, fov) = ((1:n) .- (n ÷ 2 + 1)) .* (fov / n)
+    hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]));
+    tip(text) = Markdown.MD(Markdown.Admonition("note", "Tip", [text]));
+    note(text) = Markdown.MD(Markdown.Admonition("note", "note", [text]));
+	answer_blurred(text) = Markdown.MD(Markdown.Admonition("tip", "Answer", [text]));
+    important(text) = Markdown.MD(Markdown.Admonition("example", "Important", [text]));
+	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]));
+    answer_folded(text) = @htl("""
+    <details class="admonition info" style="background-color: #f1f8e9 !important; border-left-color: #2e7d32 !important; display: block; margin: 1em 0; padding: 0; border-left-style: solid; border-left-width: .4rem; border-radius: .2rem; box-shadow: 0 .2rem .5rem rgba(0,0,0,.05), 0 0 .05rem rgba(0,0,0,.1); overflow: hidden;">
+      <summary class="admonition-title" style="cursor: pointer; font-weight: bold; padding: .6rem 1rem .6rem 2rem; background-color: rgba(46, 125, 50, 0.1); color: #1b5e20; border-bottom: 1px solid rgba(46, 125, 50, 0.1); user-select: none;">
+        Answer
+      </summary>
+      <div class="admonition-content" style="padding: 1rem;">
+        $text
+      </div>
+    </details>
+    """)
+end
 
-	"Display an image with physical axes (mm)"
-	function show_img!(gp, A; title="", fov=FOV, colormap=:grays, colorrange=extrema(A))
-		nx, ny = size(A)
-		ax = Axis(gp; title, aspect=DataAspect(), xlabel="x (mm)", ylabel="y (mm)")
-		heatmap!(ax, pixcoords(nx, fov[1]), pixcoords(ny, fov[2]), A; colormap, colorrange)
-		return ax
-	end
+# ╔═╡ 066f2d77-4a57-4396-a86a-9b5eed5e7896
+md"""
+**Q1** How could we represent this ? 
+""" |> question
 
-	"Display a k-space (log scale by default) with axes in sample index relative to the center"
-	function show_ksp!(gp, K; title="", logscale=true)
-		nx, ny = size(K)
-		ax = Axis(gp; title, aspect=DataAspect(), xlabel="i_kx", ylabel="i_ky")
-		if logscale
-			kref = log10(maximum(abs, K))
-			heatmap!(ax, (1:nx) .- (nx ÷ 2 + 1), (1:ny) .- (ny ÷ 2 + 1), log10.(abs.(K) .+ eps()); colormap=:inferno, colorrange=(kref - 5, kref))
-		else
-			heatmap!(ax, (1:nx) .- (nx ÷ 2 + 1), (1:ny) .- (ny ÷ 2 + 1), abs.(K); colormap=:inferno)
-		end
-		return ax
-	end
+# ╔═╡ 0c73051a-f356-4094-9250-2cb1cc72201d
+md"""
+Use a 3D plot to show the transverse magnetization $(M_{xy})$ of all isochromats. 
+One axis for $M_x$, a second one for $M_y$ and the last one represents the spatial direction within the voxel.
 
-	"Display the phase of the k-space  with axes in sample index relative to the center"
-	function show_ksp_angle!(gp, K; title="", logscale=true)
-		nx, ny = size(K)
-		ax = Axis(gp; title, aspect=DataAspect(), xlabel="i_kx", ylabel="i_ky")
-		heatmap!(ax, (1:nx) .- (nx ÷ 2 + 1), (1:ny) .- (ny ÷ 2 + 1), angle.(K); colormap=:inferno)
-		return ax
-	end
+""" |> tip
 
+# ╔═╡ 53bc8b12-8aa9-47f8-8749-0c7aebca433a
+md"""
+**Q2** Can you use the function _visuMxy_ to visualize the isochromats in that case? 
+""" |> question
+
+# ╔═╡ 43302385-ba8a-4e7b-9cff-2c5bf977d5b8
+md"""
+
+$$\begin{equation}
+
+M_{xy}(p) = \exp(i2\pi p) 
+\end{equation}$$
+
+""" |> hint
+
+# ╔═╡ 1eb4b0bd-857a-4a94-ac67-67c598b721fa
+md"""
+Note that only $F_0$ will give signal as the other states will be completely dephased !
+"""|>important
+
+# ╔═╡ be57d254-3fe7-44a5-85df-7483f8f4854b
+md"""
+This visualization is equivalent to a more classic 2D view where the position would be only represented by the color and not the  axis. 
+"""|>note
+
+# ╔═╡ cd76a5df-6a9a-428e-af83-6d904c1b50b0
+md"""
+**Q3** What about the longitudinal magnetization ?
+Write a function similar to _visuMxy_ that generates a graph of the longitudinal components of the isochromats.  
+""" |> question
+
+# ╔═╡ 1cfb4b83-7b50-449e-94d4-52e751ae4180
+md"""
+
+Generally, we use a 3D plot even though a 2D plot would be sufficient as the longitudinal component is real. 
+
+""" |> tip
+
+# ╔═╡ fdee56d8-22d4-40d1-b59d-3ea436effb7a
+md"""
+**Q4** Now let's consider some isochromats that have observed a combination of gradients and RF pulses, such that at the end 
+$$\begin{equation}
+M_z (p)= \cos(2\pi p) 
+\end{equation}$$ .
+Use the previous function to draw the Mz configuration? 
+""" |> question
+
+# ╔═╡ 54b0044e-b662-4034-a844-6421b0a0af56
+md"""
+
+**Key concepts of EPG:**
+
+- Multiple states coexist at the same time.
+
+- At each time point, we can describe the whole population with a matrix $Q$ of coefficients representating the population of each state
+
+$$\begin{equation}
+Q = \begin{bmatrix}
+F_0^+ & F_1^+ & F_2^+ & \dots & F_N^+ \\
+F_0^- & F_1^- & F_2^- & \dots & F_N^- \\
+Z_0 & Z_1 & Z_2 & \dots & Z_N
+\end{bmatrix}
+\end{equation}$$
+
+- There is a direct relationship between $[M_{xy},M_z]$ and $[F_n,F_{-n},Z_n]$ based on the Fourier transform:
+
+$$\begin{equation}
+F_n^+=\int_0^1{M_{xy}(p)e^{-2\pi inp}dp}
+\end{equation}$$
+$$\begin{equation}
+F_n^-=\int_0^1{M_{xy}^*(p)e^{-2\pi inp}dp}
+\end{equation}$$
+$$\begin{equation}
+Z_n=\int_0^1{M_{z}(p)e^{-2\pi inp}dp}  
+\end{equation}$$
+
+- Inversely, we can recover $[M_{xy},M_z]$ from  $[F_n,F_{-n},Z_n]$:
+$$\begin{equation}
+M_{xy}(p)=F_0^+ + \sum_{n=1}^\infty{[F_n^+e^{2\pi i n p}+(F_n^-)^*e^{-2\pi i n p}]}
+\end{equation}$$
+$$\begin{equation}
+M_z(p)=Real\left(Z_0+2\sum_{n=1}^N Z_n e^{2i\pi n p}\right)
+\end{equation}$$
+
+- Note that $F^-_n=(F^+_{-n})^*$ and therefore $F^-_0=(F^+_0)^*$
+"""|> important
+
+
+# ╔═╡ 5ceb34a1-b95c-4bf8-aba2-71123881ee9b
+md"""
 	
-
-end;
-
-# ╔═╡ 2b0225c8-1b33-4997-87b3-8dc8544b945c
-begin 
-	kspace= fft2c(ima);
-	f1 = Figure(size=(1100, 330))
-	show_img!(f1[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-	show_ksp!(f1[1, 2], kspace[:, :]; title="k-space Magnitude(log₁₀|k|)")	
-	show_ksp_angle!(f1[1, 3], kspace[:, :]; title="k-space Phase")	
-	f1
-end
-
-# ╔═╡ bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
-begin 
-x=1:Nx
-trans_x_2=zeros(Nx)
-trans_y_2=zeros(Nx)
-trans_x_2[1:100].=-10
-trans_x_2[101:(Nx-100)].=0
-trans_x_2[(Nx-99):Nx].=10
-rot_2=zeros(Nx)
-ima_corrupted_2,ksp_corrupted_2=simulate_motion_kspace(ima, trans_x_2,trans_y_2,rot_2)
-f2 = Figure(size=(1100, 330))
-show_img!(f2[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f2[1, 2], abs.(ima_corrupted_2[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-ax2 = Axis(f2[1, 3], title="Motion Profile (trans_x)")
-lines!(ax2, x, trans_x_2)
-f2
-end
-
-# ╔═╡ 3af34ce3-2789-49a6-b18b-a1beb5120d03
-begin
-
-T=30
-trans_x_3=4*sin.(2*pi*x/T)
-trans_y_3=zeros(Nx)
-rot_3=zeros(Nx)
-
-ima_corrupted_3,ksp_corrupted_3=simulate_motion_kspace(ima, trans_x_3,trans_y_3,rot_3)
-f3 = Figure(size=(1100, 330))
-show_img!(f3[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f3[1, 2], abs.(ima_corrupted_3[:, :]); title="magnitude" ,colorrange=(0,1500))
-ax = Axis(f3[1, 3], title="Motion Profile (trans_x)")
-lines!(ax, x, trans_x_3)
-f3
-end
-
-# ╔═╡ 5d9e5be7-c056-4baa-9d72-a85038baf551
-begin 
-vessel=zeros(Nx,Ny)
-vessel[100:110,100:110].=1000
-ima_vessel=vessel+ima;
-T4=10
-intensity = 1 .+ 10 .* cos.(2π .* x ./ T4)
-ima_vessel_corrupted,ksp_vessel_corrupted=simulate_pulse_kspace(ima,vessel, intensity) 
-f4 = Figure(size=(1100, 330))
-show_img!(f4[1, 1], abs.(ima_vessel); title="magnitude",colorrange=(0,1500))
-show_img!(f4[1, 2], abs.(ima_vessel_corrupted); title = "magnitude corrupted",colorrange=(0,1500))
-ax4 = Axis(f4[1, 3], title="Intensity prrofile")
-lines!(ax4, x, intensity)
-f4
-
-end
-
-# ╔═╡ 2d19ae25-3338-49c8-8f8e-250ba4c92d42
-begin 
-trans_x_5=zeros(Nx,1)
-trans_y_5=zeros(Nx,1)
-rot_5=zeros(Nx,1)
-rot_5[1:Nx].=10;
-
-ima_corrupted_5,ksp_corrupted_5=simulate_motion_kspace(ima, trans_x_5,trans_y_5,rot_5)
-f5 = Figure(size=(1100, 330))
-show_img!(f5[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f5[1, 2], abs.(ima_corrupted_5[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-f5
-end
-
-# ╔═╡ e39eb57f-c010-4c88-ba03-2699c268aaad
-begin
-f5b= Figure(size=(1100, 330))
-show_ksp!(f5b[1, 1], abs.(kspace[:, :]); title="kspace")
-show_ksp!(f5b[1, 2], abs.(ksp_corrupted_5[:, :]); title="kspace corrupted")
-f5b
-end
-
-# ╔═╡ 60635396-7db8-4d90-a32b-b1a6704bbf8c
-begin 
-trans_x_6=zeros(Nx,1)
-trans_x_6[1:Nx].=10
-trans_y_6=zeros(Nx,1)
-rot6=zeros(Nx,1)
-
-
-ima_corrupted_6,ksp_corrupted_6=simulate_motion_kspace(ima, trans_x_6,trans_y_6,rot6)
-f6 = Figure(size=(1100, 330))
-show_img!(f6[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f6[1, 2], abs.(ima_corrupted_6[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-f6
-end
-
-# ╔═╡ b1ef0ba6-b06a-400c-bf30-12763631f400
-begin
-f6b= Figure(size=(1100, 330))
-show_ksp_angle!(f6b[1, 1], kspace[:, :]; title="phase of the kspace")
-show_ksp_angle!(f6b[1, 2], ksp_corrupted_6[:, :]; title="phase of the corrupted kspace")
-show_ksp_angle!(f6b[1, 3], ksp_corrupted_6.*conj.(kspace); title="phase difference")
-ax6 = Axis(f6b[1, 4], title="Line profile")
-lines!(ax6, angle.(ksp_corrupted_6[:,112].*conj.(kspace[:,112])))
-f6b
-end
-
-# ╔═╡ c02b8f3a-012b-402e-bcbf-127de67dc381
-begin
-img_corr_2= correct_translation(ksp_corrupted_2,trans_x_2,trans_y_2)
-f7= Figure(size=(1100, 330))
-show_img!(f7[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
-show_img!(f7[1, 2], abs.(ima_corrupted_2[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f7[1, 3], abs.(img_corr_2[:, :]); title="corrected",colorrange=(0,1500))
-f7
-end
-
-# ╔═╡ 64f8c17b-7f1b-4abe-96d1-28de47b14787
-begin
-img_corr_3= correct_translation(ksp_corrupted_3,trans_x_3,trans_y_3)
-f7b= Figure(size=(1100, 330))
-show_img!(f7b[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
-show_img!(f7b[1, 2], abs.(ima_corrupted_3[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f7b[1, 3], abs.(img_corr_3[:, :]); title="corrected",colorrange=(0,1500))
-f7b
-end
-
-# ╔═╡ 7dda83db-4263-4851-b97e-62b9f5fa6d17
-begin
-img_corr_5 = correct_rotation(ksp_corrupted_5,rot_5)
-f8= Figure(size=(1100, 330))
-show_img!(f8[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
-show_img!(f8[1, 2], abs.(ima_corrupted_5[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f8[1, 3], abs.(img_corr_5[:, :]); title="corrected",colorrange=(0,1500))
-f8
-end
-
-# ╔═╡ 92254584-fdbe-4f90-8b63-a5389166c141
-begin
-
-trans_x_11=4*sin.(2*pi*x/30)
-trans_y_11=(1:Nx)/10
-rot_11=(1:Nx)/10
-
-ima_corrupted_11,ksp_corrupted_11=simulate_motion_kspace(ima, trans_x_11,trans_y_11,rot_11)
-
-ima_corrected_11=correct_motion(ksp_corrupted_11, trans_x_11, trans_y_11, rot_11) 
-
-f11 = Figure(size=(1100, 330))
-show_img!(f11[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
-show_img!(f11[1, 2], abs.(ima_corrupted_11[:, :]); title="corrupted" ,colorrange=(0,1500))
-show_img!(f11[1, 3], abs.(ima_corrected_11[:, :]); title="corrected" ,colorrange=(0,1500))
-f11
-end
-
-# ╔═╡ ce857c52-c939-11f1-a1a6-0357bdfc8bdc
-begin
-	hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]))
-	tip(text) = Markdown.MD(Markdown.Admonition("note", "Tip", [text]))
-	note(text) = Markdown.MD(Markdown.Admonition("note", "note", [text]))
-	important(text) = Markdown.MD(Markdown.Admonition("example", "Important", [text]))
-	question(text) = Markdown.MD(Markdown.Admonition("danger", "Question", [text]))
-	answer_folded(text) = @htl("""
-	<details class="admonition info" style="background-color: #f1f8e9 !important; border-left-color: #2e7d32 !important; display: block; margin: 1em 0; padding: 0; border-left-style: solid; border-left-width: .4rem; border-radius: .2rem; box-shadow: 0 .2rem .5rem rgba(0,0,0,.05), 0 0 .05rem rgba(0,0,0,.1); overflow: hidden;">
-	  <summary class="admonition-title" style="cursor: pointer; font-weight: bold; padding: .6rem 1rem .6rem 2rem; background-color: rgba(46, 125, 50, 0.1); color: #1b5e20; border-bottom: 1px solid rgba(46, 125, 50, 0.1); user-select: none;">
-	    Answer
-	  </summary>
-	  <div class="admonition-content" style="padding: 1rem;">
-	    $text
-	  </div>
-	</details>
-	""")
-end
-
-# ╔═╡ fdb70cb8-888b-4434-9e60-7640310316a2
-md"""
-**Q0** Let's load the data and store its size (Nx and Ny) and the FOV. 
+**Q5** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\exp(4\pi i p)$ ?
+	
 """|>question
 
-# ╔═╡ 3446bc33-766b-4b43-8f9a-07afd4268858
+# ╔═╡ 7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
 md"""
-**Q1** Generate the k-space of the data using the functions below. Display the image and the k-space using the helper functions. 
-"""|>question
-
-# ╔═╡ c66709c1-a212-4f3b-8c19-e768dbb71682
-md"""
-**Q2** If  the patient had his head shifted by 1cm to the right during the 100 first lines and 1cm to the left druring the 100 last lines. What artefact can you see in the image  ?  
-"""|>question
-
-# ╔═╡ a0c85fd8-297c-42cf-9cb9-8575709815e4
-md"""
-The image is corrupted by ghosting artifacts typical of motion occuring during the acquisition time. The lines are mostly replicas of the edges of the object (high spatial frequencies). 
-"""|>note
-
-# ╔═╡ dad5a8ee-75d3-4418-b876-a2a11099d636
-md"""
-**Q3** Now let's imagine the patient moves his head periodically in the x direction ( with a period of 30 lines ). How does the artefact look  ? 
-"""|>question
-
-# ╔═╡ af5db716-1396-4805-bf1f-4c2e87f07396
-md"""
-This is typically the artefact we can observe in abdominal imaging. 
-"""|>note
-
-# ╔═╡ 109778b6-7d2f-49a3-9982-28d34c61910e
-md"""
-**Q4** If the blood signal across the slice varies sinusoidally with a period of 1 second (corresponding to 10 encoded lines), how does the artefact look?  
-"""|>question
-
-# ╔═╡ 43db9278-c188-461a-968b-027873fe221a
-md"""
-In the same vein of simulate_motion_kspace, you can create simulate_pulse_kspace.
+Maybe try to vizualize it with _visuMxy_ ...
+And then look at the equations ...
 """|>hint
 
-# ╔═╡ 1f9a7a3c-a646-45c0-bcd3-efbffa16504d
+# ╔═╡ 3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
 md"""
-The pulsatile artefact looks like replicas of the vessel in the phase encoding direction. The position of the artefacts depends ont he frequency of variation with respect to the TR. 
+	
+**Q6** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\exp(4\pi i p)$ ?
+	
+"""|>question
+
+# ╔═╡ e29d1009-e681-4ac7-8795-dd87b3cd29e3
+md"""
+Note that coefficients can be complex, which allows the configuration to be rotated by a given angle. 
 """|>important
 
-# ╔═╡ aa8bc3c9-bb5f-4983-b055-e46c44bc34e2
+# ╔═╡ 44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
 md"""
-**Q5** Imagine the volunteer rotates his head by 10° (right at the begining of the scanning).  How does the k-space look ? Compare it to the original k-space
+	
+**Q7** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =\exp(-4\pi i p)$ ?
+	
+"""|>question
+
+# ╔═╡ 84ce7725-9300-499c-bf2f-294587347720
+md"""
+	
+Note that $F^-_n$ and $F^+_n$ have the same number of "twists" but with opposite angle. 
+"""|>important
+
+# ╔═╡ 8447240b-27a2-4df5-9366-2fad126a1651
+md"""
+$cos(x)=(e^{ix}+e^{-ix})/2$
+"""|>hint
+
+# ╔═╡ 0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
+md"""
+	
+**Q9** What are the EPG coefficients ($F_n$) of this configuration of isochromats:$M_{xy}(p) =i\cos(2\pi p)$ ?
+	
+"""|>question
+
+# ╔═╡ 2307f7ec-b5bb-4bf4-807d-458b04b87e29
+md"""
+	
+**Q10** What are the EPG coefficients ($Z_n$) of this configuration of isochromats:$M_z(p) =\sin(2\pi p)$ ?
+	
+"""|>question
+
+# ╔═╡ d7260975-4ba0-414e-8493-ecb35d674f9e
+md"""
+$e^x=\cos(x)+i\sin(x)$
+"""|>hint
+
+# ╔═╡ 44151964-9080-4975-a05f-de08a201df72
+md"""
+**Q11a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=0.5 e^{2\pi i p}$ and the longitudinal magnetization $M_z(p) =0.5$ ?
+"""|>question
+
+# ╔═╡ 342d3039-4d5f-4493-af7b-fb83d31df08f
+md"""
+	 
+**Q11b** With a more classic representation in 3D with $M_x$, $M_y$ and $M_z$ for the three axes, how does this configuration look ? 
+	
+"""|>question
+
+# ╔═╡ 20ad0308-6775-4650-93ce-8fe5f66dc746
+md"""
+**Q11c** What would be the Q matrix of this particular configuration ? 
 """|>question 
 
-# ╔═╡ d24a7403-5615-4d9d-833f-d808947be37b
+# ╔═╡ a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
 md"""
-A rotation in the image domain is a rotation in the k-space domain. 
+**Q12a** What are the EPG coefficients ($F_n$ and $Z_n$) of this configuration of isochromats with the transverse magnetization $M_{xy}(p)=\cos(2\pi p)$ and the longitudinal magnetization $M_z(p) =\sin(2\pi p)$ ?
+"""|>question
 
-- **Rotation:** $m(\mathbf{x}) \rightarrow m(R\mathbf{x})$ $\quad\Longleftrightarrow\quad$ $M(\mathbf{k}) \rightarrow M(R\mathbf{k})$
-"""|>important 
-
-# ╔═╡ dc350c3a-542a-4726-9c48-605be648bb87
+# ╔═╡ a6e7c563-0b40-4d0f-9f87-361c169501ab
 md"""
-**Q6** Imagine the volunteer shifts his head by 10mm (right at the begining of the scanning).  How does the k-space look ? Compare it to the original k-space
+**Q12b** What is the Q matrix of this configuration ? 
+"""|> question 
+
+# ╔═╡ 816dfb87-d5c0-41e4-872e-e29319035047
+md"""
+**Q13** How does this configuration look ?
+$$\begin{equation}
+Q = \begin{bmatrix}
+0 & 0.8  \\
+0 & 0.2 \\
+0 & 0
+\end{bmatrix}
+\end{equation}$$
+
+"""|>question
+
+# ╔═╡ 71855601-5211-494a-a916-df606c4928c9
+md"""
+Write a function that converts a Q matrix to $[M_{xy},M_z]$.
+"""|>tip
+
+# ╔═╡ e9adf55b-0851-4c1b-a468-c1e42d0389b8
+md"""
+Note that by combining circular distributions in one direction $F^-$ and in the other $F^+$ states, we end up with elliptical distributions. Plot separetely the $F_1^+ and the $F_1^-$ state of this configuration to be convinced !
+"""|>important
+
+# ╔═╡ a437b267-089e-48bf-85cf-a0288a99a294
+md"""
+ **Reminder:**
+ $$\begin{equation}
+\begin{bmatrix} 
+F_n^+ \\ 
+F_n^- \\ 
+Z_n 
+\end{bmatrix} = \int_{0}^{1} 
+\begin{bmatrix} 
+M_{xy}(z) \\ 
+M_{xy}^*(z) \\ 
+M_z(z) 
+\end{bmatrix} e^{-2\pi inz} dz
+\end{equation}$$
+
+"""|>important
+
+# ╔═╡ e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
+md"""
+**Q14** If the configuration state is 
+$Q=\begin{bmatrix}
+0.1 & 0 & 0.2i\\
+0.1 & 0.3 & 0  \\
+0 & 0.5i & 0
+\end{bmatrix}$
+just after the excitation
+and the off-resonance frequency of the object is $\delta\omega=50Hz$. 
+
+How does the distribution of the isochromat look at TE=0ms and TE=10ms (we neglect the relaxation) ?
+"""|>question
+
+# ╔═╡ 0c9e9709-0f08-42cf-8ebe-34fb924364a9
+md"""
+**Q15** What results from applying a unit gradient to $Q=\begin{bmatrix}
+0.5 & 0.25 & 0\\
+0.5 & 0.1i & 0  \\
+0 & 0.2i & 0
+\end{bmatrix}$ ?
+
+Plot the isochromats before and after the application of the gradients with the tools that help you the best to understand what is happening.
+	
+"""|>question
+
+# ╔═╡ 70f9159c-0aa8-41f4-bea6-959e697ea3d1
+md"""
+**Q16** If the relaxation times are $T_1=100ms$ and $T_2=40ms$ andthe configuration state is $Q=\begin{bmatrix}
+-0.1i & 0.5 & 0.25\\
+0.1i & 0 & 0  \\
+0 & 0.2i & 0
+\end{bmatrix}$, how does the configuration change after $20ms$? 
+"""|>question
+
+
+# ╔═╡ 0415830d-0026-4392-8b0d-f699fe445cea
+md"""
+**Q17a** What is the rotation matrix of an excitation pulse of 90° along the x axis ? 
 """|>question 
 
-# ╔═╡ 7d052ad4-3902-4479-ad06-10430b341958
+# ╔═╡ 3698965a-6f37-4639-823f-cdc679d9dffb
 md"""
-A translation in the image domain is a phase ramp in the k-space
-- **Translation:** $m(\mathbf{x}) \rightarrow m(\mathbf{x} - d\mathbf{x}_0)$ $\quad\Longleftrightarrow\quad$ $M(\mathbf{k}) \rightarrow M(\mathbf{k})\, e^{-i 2\pi\, \mathbf{k} \cdot d\mathbf{x}_0}$
+Write a function that returns  the rotation matrix. 
+"""|>tip
 
-"""|>important 
-
-# ╔═╡ fd195341-4cd5-4577-bb23-a5a062338b90
+# ╔═╡ 9094e9ad-392c-454d-aa8c-25cd567d900e
 md"""
-**Q7** Correct the images created in **Q2** and **Q6**.
-Create a function that correct for the motiton in the k-space assuming we know the motion that occurred (camera, navigators ...)
+**Q17b** what is the effect on this configuration matrix: 
+$Q=\begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$ ? What is the isochromat distribution? 
 """|>question
 
-# ╔═╡ 828be7e3-10a7-456e-b808-caf40e2a5e5a
+# ╔═╡ ded0162b-4785-4b3f-8c2f-3b112bcf951d
 md"""
-**Q8** Can you write a function that corrects for rotation and apply it to the corrupted image of **Q5** ?
+**Q18a** Let's take an example where the initial configuration is $Q=\begin{bmatrix} 
+0 & 1 \\ 
+0 & 0  \\ 
+0 & 0 
+\end{bmatrix}$. 
+
+Without any calculation, what Q matrix is the result of the application of the 60° pulse ?
+
+**A**: $\begin{bmatrix}  0 & 0.75 & 0.25 \\ 0 & -0.25 & 0\\ 0.43 & 0 & -0.43  \end{bmatrix}$   
+    
+**B**: $\begin{bmatrix} 0.25 & 0 \\ 0.25 & -0.25 \\ 0 & -0.43 \end{bmatrix}$   
+
+**C**: $\begin{bmatrix} 0 & 0.75\\ 0 & -0.25 \\ 0 & -0.43 \end{bmatrix}$   
+    
 """|>question
 
-# ╔═╡ 3a1fec8b-05f4-4db3-9ec4-6c6333cd3a53
+# ╔═╡ bccdb23f-057c-471b-8257-0851fdd9b853
 md"""
-**Q9** Why do we apply 'rot' and not '-rot' for the correction of rotation  ? 
+**Q18b** How does the distribution of the isochromat look after the 60° pulse ? 
+    
 """|>question
 
-# ╔═╡ c2f189ca-18fe-4bfc-ba2a-327c1c05adb6
+# ╔═╡ b18a5a3c-49b5-4db4-9c3e-92622acb2178
 md"""
-Because the correction doesn’t rotate the image backwards: it puts each sample back where it really came from.
+**Q19** What is the effet of a 180° pulse on this configuration $Q=\begin{bmatrix} 0 & i \\ 0 & 0 \\ 0 & 0 \end{bmatrix}$   
 
-In other words, the value stored at grid position k is the value of the reference k-space at the point R(θ)·k. It is a genuine sample of M, just stored at the wrong address.
+"""|>question
 
-
-We don’t change the value; we fix its address. We tell the NFFT “this sample is located at R(θ)·k”. The NFFT then reconstructs the reference image directly, because every sample is now a sample of M placed at the right position. The inversion lies in this relocation: starting from k, R(θ) takes the sample back to its original position.
-
-With -rot, You would be saying the sample comes from R(−θ)·k, when it actually comes from R(θ)·k. The position error is 2θ, and the image comes out rotated by 2θ.
-
-Why translation is corrected with a minus sign
-
-For translation, we act on the value: the data was multiplied by e^{+iφ}, so we multiply it by e^{−iφ}.
-For rotation, we act on the position: we reuse the transformation that was applied, R(θ), to find where the sample was taken in the reference k-space.
-
-Both corrections undo the motion, but one works on the values and the other on the coordinates, hence the different sign.
-
+# ╔═╡ f0f11355-abc5-4c3c-af7c-cffc781cb316
+md"""
+A perfect 180° pulse swaps $F_n^+$ and $F_n^-$ states. 
 """|>answer_folded
 
-# ╔═╡ e97fe6fa-9ae7-49ae-aa4f-5af1ada736b2
+# ╔═╡ aae6009d-35d4-4b3d-95d5-c7071f7efd79
 md"""
-**Q10** How to correct for translation and rotation ? Write the appropriate function
-"""|>question
+To sum up, phenomena and events of a classic MR pulse sequence easily translate into the EPG framework: 
 
-# ╔═╡ 40ff487e-bb9e-4d3c-84e2-31f8456ebede
-md"""
-**Q11** Corrupt the original image with the following motion:
-- a sinusoidal translation along x with a period of 10 TR and an amplitude of 4 mm.  
-- a linear translation along y of 0.1mm every TR 
-- a rotation of 0.1° every TR 
-"""|>question
+- **Precession**: multiplication by a diagonal rotation matrix 
+- **Gradient**: increase n of $F^+$ and decrease n of $F^-$
+- **RF pulse**: mix of coefficients from the same _n_ level
+- **Relaxation**: $T_2$ decay attenuates $F_n$ coefficients and $T_1$ attenuates $Z_n$ and enhances $Z_0$
 
-# ╔═╡ 8e7399e4-776e-4410-849e-5e719d324002
-md"""
-**⚠️ Order of translation and rotation.** A rigid motion combines a rotation $R$ and a translation $\mathbf{d}$, but the two operations do not commute: "translate then rotate", $m(R(\mathbf{x}+\mathbf{d}))$, is not the same as "rotate then translate", $m(R\mathbf{x}+\mathbf{d})$. In this practical session, the motion is simulated as translation then rotation. 
 """|>important
+
+# ╔═╡ a393c627-906d-4996-bbbd-cdf20c1db112
+md"""
+**Q20a**  If  $TE=20ms$, $T1=1000ms$ and $T2=100ms$, what is the amplitude of the first echo ? What is the isochromat distribution at TE ? 
+"""|>question
+
+# ╔═╡ 7d821ff3-fcd9-485d-8941-336745c0a35d
+md"""
+Write a code with the EPG functions previously implemented. 
+"""|>tip
+
+# ╔═╡ 822102cb-52e3-4184-b74d-283275f3a291
+md"""
+The magnitude of the first echo is $F_0^+=0.82$.
+"""|>answer_folded
+
+# ╔═╡ e520500b-036c-4d84-b15c-9163ec2783a6
+md"""
+**Q20b** What is the amplitude of all of the 32 echoes ? 
+"""|>question 
+
+# ╔═╡ 0f21e602-1779-45fc-ae8a-ae920f69e9fb
+md"""
+ Write a function that simulates a MESE sequence as it might be useful for the next questions.Refocussing flip angles and phase of the RF pulses should be arguments of the function.
+ In the function it might be interestsing to show the evolution of the Q matrix for each echo. 
+"""|>tip
+
+# ╔═╡ 530aae7d-c72f-4bc9-928a-ec75b3866d64
+md"""
+**Q20c** What happens if the refocussing pulse is imperfect and only reaches 170° ? 
+"""|>question 
+
+# ╔═╡ b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
+md"""
+**Q20d** Which small modification of the sequence can be done to reduce the error ? 
+"""|>question 
+
+# ╔═╡ 2d44ed1c-54b8-4bdf-a853-255e22466e53
+md"""
+1. Change the phase of the refocussing pulse 
+2. Look for the Carr‑Purcell‑Meiboom‑Gill condition 
+"""|>hint
+
+# ╔═╡ 6ccbe255-748e-4e5a-bb3d-68500d1838be
+md"""
+It's also possible to keep the refocussing pulse on the x axis but alternate the phase between $\pi$ and $0$ across echoes. Try if you need to be convinced ;-)  
+"""|>note
+
+# ╔═╡ dc71cc6e-2543-4b8d-a0dc-9832b64165ff
+md"""
+Which RF spoiling phase increment ($\phi_0$) yields a signal closest to the ideal theoretical model (where transverse magnetization is fully destroyed at each TR)?
+	
+**A**: $\phi_0=0°$
+	
+**B**: $\phi_0=117°$
+	
+**C**: $\phi_0=120°$
+"""|>question
+
+# ╔═╡ fef04dea-83d3-4c96-9331-68d3fde6cfc0
+md"""
+In quantitative MRI, it is really important to take that effect into account. If the signal is not exactly the one predicted, the estimated T1 will be biased. 
+
+"""|>important
+
+# ╔═╡ 606f97b6-4693-44e8-bc76-34c656e1f047
+md"""
+**Q22** How many dummy cycles (number of TR) are required to reach the steady-state of the bSSFP sequence with $\alpha=30°$ and $TR=10ms$ when imaging an object with $T1=1000ms$ and $T2=100ms$. 
+
+"""|>question
+
+# ╔═╡ f93cfa73-67a0-4474-95c0-e468915c25bc
+md"""
+For this exercise, we consider the steady-state being reached when the difference between two consecutives TRs is less than 0.0001 (assuming $M_0=1$)
+"""|>tip
+
+# ╔═╡ 10498091-e583-442e-9ec4-b565a6cf61ce
+md"""
+**Q22b** How would the signal vary in the case of off-resonance frequency (from -200Hz to 200Hz)? 
+"""|>question 
+
+# ╔═╡ 4c29f5d6-db13-4111-ba6e-774a661b8692
+md"""
+**Q22c** Changing the TR or the phase of the RF pulse will have an impact. WIll that be a change of the distance between two dark band or a shift of all the the bands ? 
+"""|>question
+
+# ╔═╡ 680ec799-71a7-4cd7-b8a2-f213a7a747b8
+md"""
+**Q22d** What is the effect of linearly changing the phase of the RF pulse from TR to TR ? 
+
+"""|>question
+
+
+# ╔═╡ 71e31c86-ba5e-452b-8233-bc44861fdfa6
+html"""
+<style>
+    /* Force le titre à rester net en permanence */
+  .admonition.tip .admonition-title {
+      filter: none !important;
+  }
+  /* Cible le texte à l'intérieur pour le flouter */
+  .admonition.tip p {
+      filter: blur(3px);
+      transition: filter 0.4s ease; /* Effet de transition fluide */
+      cursor: pointer;
+  }
+
+  /* Annule le flou au survol de la souris (hover) */
+  .admonition.tip:hover p {
+      filter: none;
+  }
+</style>
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
-FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-ImageTransformations = "02fcd773-0e25-5acc-982a-7f6622650795"
+Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
-NFFT = "efe261a4-0d2b-5849-be55-fc731d526b0d"
-NFFTTools = "7424e34d-94f7-41d6-98a0-85abaf1b6c91"
 PlutoTeachingTools = "661c6b06-c737-4d37-b85c-46df65de6f69"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
-CoordinateTransformations = "~0.6.4"
-FFTW = "~1.10.0"
-GLMakie = "~0.13.13"
+Distributions = "~0.25.129"
+GLMakie = "~0.13.12"
 HypertextLiteral = "~1.0.0"
-ImageTransformations = "~0.10.3"
-MAT = "~0.12.1"
-NFFT = "~0.14.3"
-NFFTTools = "~0.3.0"
+Latexify = "~0.16.10"
 PlutoTeachingTools = "~0.4.7"
 PlutoUI = "~0.7.83"
-Rotations = "~1.7.1"
 ShortCodes = "~0.4.2"
 """
 
@@ -750,7 +1177,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "c9ae5bd5d1ca7bc6771c0ee1be17dfbb90f628f3"
+project_hash = "dafa1c5dbb36807224c4efad756cfc706ba0f06e"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -763,20 +1190,10 @@ weakdeps = ["ChainRulesCore", "Test"]
     AbstractFFTsChainRulesCoreExt = "ChainRulesCore"
     AbstractFFTsTestExt = "Test"
 
-[[deps.AbstractNFFTs]]
-deps = ["LinearAlgebra", "Printf", "Requires", "ScopedValues"]
-git-tree-sha1 = "27aa55535187ed2e62aff2883399a443944d0f55"
-uuid = "7f219486-4aa7-41d6-80a7-e08ef20ceed7"
-version = "0.9.1"
-weakdeps = ["ChainRulesCore"]
-
-    [deps.AbstractNFFTs.extensions]
-    AbstractNFFTsChainRulesCoreExt = "ChainRulesCore"
-
 [[deps.AbstractPlutoDingetjes]]
-git-tree-sha1 = "e71ee7b4aa06b045259a7d6101e1cb45ad140bce"
+git-tree-sha1 = "6c3913f4e9bdf6ba3c08041a446fb1332716cbc2"
 uuid = "6e696c72-6542-2067-7265-42206c756150"
-version = "1.4.1"
+version = "1.4.0"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -809,9 +1226,9 @@ version = "0.1.45"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "dee8388a9bec89c8713ad176f96960ae2f98598a"
+git-tree-sha1 = "daa72978cd7a624246e894a4f4f067706d4e17e2"
 uuid = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-version = "4.7.4"
+version = "4.7.0"
 weakdeps = ["SparseArrays", "StaticArrays"]
 
     [deps.Adapt.extensions]
@@ -861,28 +1278,6 @@ git-tree-sha1 = "4126b08903b777c88edf1754288144a0492c05ad"
 uuid = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 version = "0.4.8"
 
-[[deps.BangBang]]
-deps = ["Accessors", "ConstructionBase", "InitialValues", "LinearAlgebra"]
-git-tree-sha1 = "cceb62468025be98d42a5dc581b163c20896b040"
-uuid = "198e06fe-97b7-11e9-32a5-e1d131e6ad66"
-version = "0.4.9"
-
-    [deps.BangBang.extensions]
-    BangBangChainRulesCoreExt = "ChainRulesCore"
-    BangBangDataFramesExt = "DataFrames"
-    BangBangStaticArraysExt = "StaticArrays"
-    BangBangStructArraysExt = "StructArrays"
-    BangBangTablesExt = "Tables"
-    BangBangTypedTablesExt = "TypedTables"
-
-    [deps.BangBang.weakdeps]
-    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-    DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
-    StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-    Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
-    TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
-
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 version = "1.11.0"
@@ -891,12 +1286,6 @@ version = "1.11.0"
 git-tree-sha1 = "8c290a1b223deaeea9aea44b235d24546da8eb98"
 uuid = "18cc8868-cbac-4acf-b575-c8ff214dc66f"
 version = "1.4.0"
-
-[[deps.BasicInterpolators]]
-deps = ["LinearAlgebra", "Memoize", "Random"]
-git-tree-sha1 = "3f7be532673fc4a22825e7884e9e0e876236b12a"
-uuid = "26cce99e-4866-4b6d-ab74-862489e035e0"
-version = "0.7.1"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -927,30 +1316,25 @@ version = "1.0.1+0"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "Libdl", "Pixman_jll", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "7b841680738c19948120f6e4cf8d0200518bd564"
+git-tree-sha1 = "1fa950ebc3e37eccd51c6a8fe1f92f7d86263522"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
-version = "1.18.8+0"
+version = "1.18.7+0"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
-git-tree-sha1 = "8ae5ee44c8c4cbd943f6b4f21747df2bb3041513"
+git-tree-sha1 = "12177ad6b3cad7fd50c8b3825ce24a99ad61c18f"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.26.2"
+version = "1.26.1"
 weakdeps = ["SparseArrays"]
 
     [deps.ChainRulesCore.extensions]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
 
-[[deps.ChunkSplitters]]
-git-tree-sha1 = "1c52c8e2673edc030191177ff1aee42d25149acb"
-uuid = "ae650224-84b6-46f8-82ea-d812ca08434e"
-version = "3.2.0"
-
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
-git-tree-sha1 = "970758a3d591a2a5c2a907c53f2e2f8c1b1d3537"
+git-tree-sha1 = "962834c22b66e32aa10f7611c08c8ca4e20749a9"
 uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
-version = "0.7.9"
+version = "0.7.8"
 
 [[deps.CodecZstd]]
 deps = ["TranscodingStreams", "Zstd_jll"]
@@ -972,9 +1356,9 @@ version = "3.31.0"
 
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
-git-tree-sha1 = "a7cf827a79b378a381e31e5c7feca853ec19cb94"
+git-tree-sha1 = "67e11ee83a43eb71ddc950302c53bf33f0690dfe"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
-version = "0.12.4"
+version = "0.12.1"
 weakdeps = ["StyledStrings"]
 
     [deps.ColorTypes.extensions]
@@ -991,16 +1375,15 @@ weakdeps = ["SpecialFunctions"]
     SpecialFunctionsExt = "SpecialFunctions"
 
 [[deps.Colors]]
-deps = ["ColorTypes", "FixedPointNumbers", "LinearAlgebra", "Reexport"]
-git-tree-sha1 = "a633156e74096f90b3b5e833529292b651b5671a"
+deps = ["ColorTypes", "FixedPointNumbers", "Reexport"]
+git-tree-sha1 = "37ea44092930b1811e666c3bc38065d7d87fcc74"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
-version = "0.13.3"
+version = "0.13.1"
 
 [[deps.CommonSolve]]
-deps = ["PrecompileTools"]
-git-tree-sha1 = "6c389fa857f6ca5a95474b52a52023fd77f24cb7"
+git-tree-sha1 = "99ee296f88c12485402e37c2fd025f95ae097637"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
-version = "0.2.14"
+version = "0.2.9"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
@@ -1048,12 +1431,6 @@ git-tree-sha1 = "439e35b0b36e2e5881738abc8857bd92ad6ff9a8"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.6.3"
 
-[[deps.CoordinateTransformations]]
-deps = ["LinearAlgebra", "StaticArrays"]
-git-tree-sha1 = "a692f5e257d332de1e554e4566a4e5a8a72de2b2"
-uuid = "150eb455-5306-5404-9cee-2592286d6298"
-version = "0.6.4"
-
 [[deps.CoreMath]]
 deps = ["CoreMath_jll"]
 git-tree-sha1 = "8c0480f92b1b1796239156a1b9b1bfb1b39499b4"
@@ -1073,9 +1450,9 @@ version = "1.16.0"
 
 [[deps.DataStructures]]
 deps = ["OrderedCollections"]
-git-tree-sha1 = "b0bc6d2cad1fed8b7fd59a1551a991cb3d2809e6"
+git-tree-sha1 = "6fb53a69613a0b2b68a0d12671717d307ab8b24e"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.19.6"
+version = "0.19.5"
 
 [[deps.DataValueInterfaces]]
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
@@ -1095,9 +1472,9 @@ version = "1.16.2+0"
 
 [[deps.DelaunayTriangulation]]
 deps = ["AdaptivePredicates", "EnumX", "ExactPredicates", "Random"]
-git-tree-sha1 = "4ac548adcad90c1d5d677af13568a748af4c952b"
+git-tree-sha1 = "c55f5a9fd67bdbc8e089b5a3111fe4292986a8e8"
 uuid = "927a84f5-c5f4-47a5-9785-b46e178433df"
-version = "1.6.7"
+version = "1.6.6"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -1106,9 +1483,9 @@ version = "1.11.0"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "Roots", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "a958ab3a40c755563f5e1405c0846cb0446bf19d"
+git-tree-sha1 = "cd3c5ac74cd3923c8945c6a81518c46abd0e73a3"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.131"
+version = "0.25.129"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -1157,9 +1534,9 @@ version = "2.2.9"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "2bfb1e047e2ad0a5ca94365340bde8005d637568"
+git-tree-sha1 = "e6c4a6407a949e79a9d3f249bf49e6987c80e01f"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.8.4+0"
+version = "2.8.2+0"
 
 [[deps.FFMPEG_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "PCRE2_jll", "Zlib_jll", "libaom_jll", "libass_jll", "libfdk_aac_jll", "libva_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
@@ -1172,18 +1549,6 @@ deps = ["AbstractFFTs", "DocStringExtensions", "LinearAlgebra", "MuladdMacro", "
 git-tree-sha1 = "65e55303b72f4a567a51b174dd2c47496efeb95a"
 uuid = "b86e33f2-c0db-4aa1-a6e0-ab43e668529e"
 version = "0.3.1"
-
-[[deps.FFTW]]
-deps = ["AbstractFFTs", "FFTW_jll", "Libdl", "LinearAlgebra", "MKL_jll", "Preferences", "Reexport"]
-git-tree-sha1 = "97f08406df914023af55ade2f843c39e99c5d969"
-uuid = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-version = "1.10.0"
-
-[[deps.FFTW_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "6866aec60ef98e3164cd8d6855225684207e9dff"
-uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
-version = "3.3.12+0"
 
 [[deps.FileIO]]
 deps = ["Pkg", "Requires", "UUIDs"]
@@ -1230,9 +1595,9 @@ version = "1.11.0"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "417289ac840d201005d9ed16789a46defccbe36d"
+git-tree-sha1 = "2f979084d1e13948a3352cf64a25df6bd3b4dca3"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
-version = "1.18.1"
+version = "1.16.0"
 weakdeps = ["PDMats", "SparseArrays", "StaticArrays", "Statistics"]
 
     [deps.FillArrays.extensions]
@@ -1282,11 +1647,6 @@ git-tree-sha1 = "7a214fdac5ed5f59a22c2d9a885a16da1c74bbc7"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
 version = "1.0.17+0"
 
-[[deps.Future]]
-deps = ["Random"]
-uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
-version = "1.11.0"
-
 [[deps.GLFW]]
 deps = ["GLFW_jll"]
 git-tree-sha1 = "af06f66cca2b698ab9c482de55977ff8178d025e"
@@ -1295,27 +1655,21 @@ version = "3.4.6"
 
 [[deps.GLFW_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll", "libdecor_jll", "xkbcommon_jll"]
-git-tree-sha1 = "64bbbb7d1499297751b536dd39c58b20750ab1db"
+git-tree-sha1 = "9e0fb9e54594c47f278d75063980e43066e26e20"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
-version = "3.5.1+0"
+version = "3.4.1+1"
 
 [[deps.GLMakie]]
 deps = ["ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeTypeAbstraction", "GLFW", "GeometryBasics", "LinearAlgebra", "Makie", "Markdown", "MeshIO", "ModernGL", "Observables", "PrecompileTools", "Printf", "ShaderAbstractions", "StaticArrays"]
-git-tree-sha1 = "3e1770a9d85b8bd1767431b959d657dc8825d78d"
+git-tree-sha1 = "4ab403982698430670bd5302bfe0bd303f9518b8"
 uuid = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-version = "0.13.13"
-
-[[deps.Gamma]]
-deps = ["LogExpFunctions"]
-git-tree-sha1 = "becc397f7cfb06e343496ae6ffb04818a851da51"
-uuid = "a0844989-3bd2-4988-8bea-c9407ab0941b"
-version = "1.2.0"
+version = "0.13.12"
 
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "LinearAlgebra", "PrecompileTools", "Random", "StaticArrays"]
-git-tree-sha1 = "ec46c5825710fa1a15d468acb2d93cc939a7a5fe"
+git-tree-sha1 = "364685f5ffde25deb1bbcfd5bb278a5c6b7a9b37"
 uuid = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-version = "0.5.13"
+version = "0.5.11"
 
     [deps.GeometryBasics.extensions]
     ExtentsExt = "Extents"
@@ -1341,15 +1695,15 @@ version = "9.55.1+0"
 
 [[deps.Giflib_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "a3efbbc027441271444dcd0c0a46f2d119dc4329"
+git-tree-sha1 = "6570366d757b50fabae9f4315ad74d2e40c0560a"
 uuid = "59f7168a-df46-5410-90c8-f2779963d0ec"
-version = "6.1.3+0"
+version = "5.2.3+0"
 
 [[deps.Glib_jll]]
 deps = ["Artifacts", "GettextRuntime_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libiconv_jll", "Libmount_jll", "PCRE2_jll", "Zlib_jll"]
-git-tree-sha1 = "090526e65de8f69648ac156daae153de8b56df62"
+git-tree-sha1 = "24f6def62397474a297bfcec22384101609142ed"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
-version = "2.88.3+0"
+version = "2.86.3+0"
 
 [[deps.Graphite2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1359,50 +1713,21 @@ version = "1.3.16+0"
 
 [[deps.GridLayoutBase]]
 deps = ["GeometryBasics", "InteractiveUtils", "Observables"]
-git-tree-sha1 = "ef70da5e123a06a29e2d6ddff0f09985bc226491"
+git-tree-sha1 = "93d5c27c8de51687a2c70ec0716e6e76f298416f"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
-version = "0.11.3"
-
-[[deps.HDF5]]
-deps = ["Compat", "HDF5_jll", "Libdl", "MPIPreferences", "Mmap", "Preferences", "Printf", "Random", "Requires", "UUIDs"]
-git-tree-sha1 = "26e37af34e8ccb7a8358bd8de1619c7bcb526738"
-uuid = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
-version = "0.17.4"
-
-    [deps.HDF5.extensions]
-    MPIExt = "MPI"
-
-    [deps.HDF5.weakdeps]
-    MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
-
-[[deps.HDF5_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LibCURL_jll", "Libdl", "MPIABI_jll", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "OpenSSL_jll", "TOML", "Zlib_jll", "aws_c_s3_jll", "dlfcn_win32_jll", "libaec_jll", "mpif_jll"]
-git-tree-sha1 = "58d79d3a61d2fdeda667fead57546ae22a20b27a"
-uuid = "0234f1f7-429e-5d53-9886-15a909be8d59"
-version = "2.2.3+0"
+version = "0.11.2"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
-git-tree-sha1 = "9d9531a9cb63a9edc33836414e82a07e81710de2"
+git-tree-sha1 = "f923f9a774fcf3f5cb761bfa43aeadd689714813"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
-version = "100.14004.0+0"
-
-[[deps.HashArrayMappedTries]]
-git-tree-sha1 = "2eaa69a7cab70a52b9687c8bf950a5a93ec895ae"
-uuid = "076d061b-32b6-4027-95e0-9a2c6f6d7e74"
-version = "0.2.0"
-
-[[deps.Hwloc_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "XML2_jll", "Xorg_libpciaccess_jll"]
-git-tree-sha1 = "cbbd99d516990d05c02aa132aa077b2bf50ae323"
-uuid = "e33a78d0-f292-5ffc-b300-72abe9b543c8"
-version = "2.15.0+0"
+version = "8.5.1+0"
 
 [[deps.HypergeometricFunctions]]
-deps = ["Gamma", "LinearAlgebra"]
-git-tree-sha1 = "31bb6c92405c084617facc1d7ed9eb6c402d061e"
+deps = ["LinearAlgebra", "OpenLibm_jll", "SpecialFunctions"]
+git-tree-sha1 = "68c173f4f449de5b438ee67ed0c9c748dc31a2ec"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
-version = "0.3.30"
+version = "0.3.28"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1442,21 +1767,15 @@ version = "0.10.5"
 
 [[deps.ImageIO]]
 deps = ["FileIO", "IndirectArrays", "JpegTurbo", "LazyModules", "Netpbm", "OpenEXR", "PNGFiles", "QOI", "Sixel", "TiffImages", "UUIDs", "WebP"]
-git-tree-sha1 = "f0f005f997dfb8c5fe23920d99458a9619873893"
+git-tree-sha1 = "696144904b76e1ca433b886b4e7edd067d76cbf7"
 uuid = "82e4d734-157c-48bb-816b-45c225c6df19"
-version = "0.6.10"
+version = "0.6.9"
 
 [[deps.ImageMetadata]]
 deps = ["AxisArrays", "ImageAxes", "ImageBase", "ImageCore"]
 git-tree-sha1 = "2a81c3897be6fbcde0802a0ebe6796d0562f63ec"
 uuid = "bc367c6b-8a6b-528e-b4bd-a4b897500b49"
 version = "0.9.10"
-
-[[deps.ImageTransformations]]
-deps = ["AxisAlgorithms", "CoordinateTransformations", "ImageBase", "ImageCore", "Interpolations", "OffsetArrays", "Rotations", "StaticArrays"]
-git-tree-sha1 = "d48ebb91ef84ce0c091f2161c5d29c119d8c7833"
-uuid = "02fcd773-0e25-5acc-982a-7f6622650795"
-version = "0.10.3"
 
 [[deps.Imath_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -1474,21 +1793,10 @@ git-tree-sha1 = "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
 version = "0.1.5"
 
-[[deps.InitialValues]]
-git-tree-sha1 = "4da0f88e9a39111c2fa3add390ab15f3a44f3ca3"
-uuid = "22cec73e-a1b8-11e9-2c92-598750a2cf9c"
-version = "0.3.1"
-
 [[deps.IntegerMathUtils]]
-git-tree-sha1 = "c72458f1962faeb003bf23cbdb75164fe6280906"
+git-tree-sha1 = "4c1acff2dc6b6967e7e750633c50bc3b8d83e617"
 uuid = "18e54dd8-cb9d-406c-a71d-865a43cbb235"
-version = "0.1.4"
-
-[[deps.IntelOpenMP_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
-git-tree-sha1 = "ec1debd61c300961f98064cfb21287613ad7f303"
-uuid = "1d5cc7b8-4909-519e-a0f8-d0f5ad9712d0"
-version = "2025.2.0+0"
+version = "0.1.3"
 
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
@@ -1511,9 +1819,9 @@ version = "0.16.3"
 
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm", "CoreMath", "MacroTools", "OpenBLASConsistentFPCSR_jll", "Printf", "Random", "RoundingEmulator"]
-git-tree-sha1 = "1c531bf0f8a5c60a340926e058fd3f209b5eef5d"
+git-tree-sha1 = "c3ee408ae340565f41699e3a3fa1053698c7626e"
 uuid = "d1acc4aa-44c8-5952-acd4-ba5d80a2a253"
-version = "1.0.12"
+version = "1.0.10"
 
     [deps.IntervalArithmetic.extensions]
     IntervalArithmeticArblibExt = "Arblib"
@@ -1522,7 +1830,6 @@ version = "1.0.12"
     IntervalArithmeticIntervalSetsExt = "IntervalSets"
     IntervalArithmeticIrrationalConstantsExt = "IrrationalConstants"
     IntervalArithmeticLinearAlgebraExt = "LinearAlgebra"
-    IntervalArithmeticMakieExt = "Makie"
     IntervalArithmeticRecipesBaseExt = "RecipesBase"
     IntervalArithmeticSparseArraysExt = "SparseArrays"
 
@@ -1533,23 +1840,20 @@ version = "1.0.12"
     IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
     IrrationalConstants = "92d709cd-6900-40b7-9082-c6be49f344b6"
     LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-    Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
     RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.IntervalSets]]
-git-tree-sha1 = "0db6aea5b64caa1c47e9fdd27394f0296f05e8bf"
+git-tree-sha1 = "79d6bd28c8d9bccc2229784f1bd637689b256377"
 uuid = "8197267c-284f-5f27-9208-e0e47529a953"
-version = "0.7.15"
+version = "0.7.14"
 
     [deps.IntervalSets.extensions]
-    IntervalSetsMakieExt = "Makie"
     IntervalSetsRandomExt = "Random"
     IntervalSetsRecipesBaseExt = "RecipesBase"
     IntervalSetsStatisticsExt = "Statistics"
 
     [deps.IntervalSets.weakdeps]
-    Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
     Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
     RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
     Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -1593,9 +1897,9 @@ version = "1.8.0"
 
 [[deps.JSON]]
 deps = ["Dates", "Logging", "Parsers", "PrecompileTools", "StructUtils", "UUIDs", "Unicode"]
-git-tree-sha1 = "4657a834b01ce00f2b94546095c4350617b9af2c"
+git-tree-sha1 = "c89d196f5ffb64bfbf80985b699ea913b0d2c211"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-version = "1.10.0"
+version = "1.6.1"
 
     [deps.JSON.extensions]
     JSONArrowExt = ["ArrowTypes"]
@@ -1611,9 +1915,9 @@ version = "0.1.6"
 
 [[deps.JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "037babc10853eeb8e585418922246cb97b8e5b74"
+git-tree-sha1 = "c0c9b76f3520863909825cbecdef58cd63de705a"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
-version = "3.2.0+1"
+version = "3.1.5+0"
 
 [[deps.JuliaSyntaxHighlighting]]
 deps = ["StyledStrings"]
@@ -1634,26 +1938,26 @@ version = "3.100.3+0"
 
 [[deps.LERC_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "39bca05343661c347aae0bca57a5994a0bf4f08d"
+git-tree-sha1 = "17b94ecafcfa45e8360a4fc9ca6b583b049e4e37"
 uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
-version = "4.2.0+0"
+version = "4.1.0+0"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "e5b100780d4d30d63b4618d7930d48af409c1772"
+git-tree-sha1 = "b7970cef8ae1c990ba0c09cd8bdc1145e006632f"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
-version = "23.1.1+0"
+version = "22.1.7+0"
 
 [[deps.LaTeXStrings]]
-git-tree-sha1 = "f88f3ccef05a6a72a0cf0ed417c8fd68530f4ab2"
+git-tree-sha1 = "dda21b8cbd6a6c40d9d02a73230f9d70fed6918c"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
-version = "1.4.1"
+version = "1.4.0"
 
 [[deps.Latexify]]
 deps = ["Format", "Ghostscript_jll", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "OrderedCollections", "Requires"]
-git-tree-sha1 = "df7566479bd64f20bd16b09960145e70160ffb3b"
+git-tree-sha1 = "44f93c47f9cd6c7e431f2f2091fcba8f01cd7e8f"
 uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
-version = "0.16.12"
+version = "0.16.10"
 
     [deps.Latexify.extensions]
     DataFramesExt = "DataFrames"
@@ -1666,11 +1970,6 @@ version = "0.16.12"
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
     SymEngine = "123dc426-2d89-5057-bbad-38513e3affd8"
     tectonic_jll = "d7dd28d6-a5e6-559c-9131-7eb760cdacc5"
-
-[[deps.LazyArtifacts]]
-deps = ["Artifacts", "Pkg"]
-uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
-version = "1.11.0"
 
 [[deps.LazyModules]]
 git-tree-sha1 = "a560dd966b386ac9ae60bdd3a3d3a326062d3c3e"
@@ -1749,9 +2048,9 @@ version = "1.12.0"
 
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "b85e2797b2409570e84c4de46238c0ed5f6476ae"
+git-tree-sha1 = "bba2d9aa057d8f126415de240573e86a8f39d2a1"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "1.0.2"
+version = "1.0.1"
 
     [deps.LogExpFunctions.extensions]
     LogExpFunctionsChainRulesCoreExt = "ChainRulesCore"
@@ -1767,46 +2066,10 @@ version = "1.0.2"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
 
-[[deps.MAT]]
-deps = ["CodecZlib", "Dates", "HDF5", "OrderedCollections", "PooledArrays", "SparseArrays", "StringEncodings", "Tables"]
-git-tree-sha1 = "f407947457464f24f6cf34b744e2f86a7929a93e"
-uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
-version = "0.12.1"
-
 [[deps.MIMEs]]
 git-tree-sha1 = "c64d943587f7187e751162b3b84445bbbd79f691"
 uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
 version = "1.1.0"
-
-[[deps.MKL_jll]]
-deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "oneTBB_jll"]
-git-tree-sha1 = "282cadc186e7b2ae0eeadbd7a4dffed4196ae2aa"
-uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
-version = "2025.2.0+0"
-
-[[deps.MPIABI_jll]]
-deps = ["Artifacts", "Hwloc_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIPreferences", "TOML"]
-git-tree-sha1 = "42e2cada9f35500b4d227106ce2b60e85d9f15bc"
-uuid = "b5ada748-db0f-5fc0-8972-9331c762740c"
-version = "1.0.1+0"
-
-[[deps.MPICH_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "Hwloc_jll", "JLLWrappers", "Libdl", "MPIPreferences", "TOML"]
-git-tree-sha1 = "08cb47f95a2f1b795e43a9e4f9783e68ecdc1ca6"
-uuid = "7cb0a576-ebde-5e09-9194-50597f1243b4"
-version = "5.0.3+0"
-
-[[deps.MPIPreferences]]
-deps = ["Libdl", "Preferences"]
-git-tree-sha1 = "8e98d5d80b87403c311fd51e8455d4546ba7a5f8"
-uuid = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"
-version = "0.1.12"
-
-[[deps.MPItrampoline_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIPreferences", "TOML"]
-git-tree-sha1 = "09a99227205419c00e734f413ee98c18bc1b02e4"
-uuid = "f1f71cc9-e9ae-5b93-9b94-4fe0e1ad3748"
-version = "5.5.7+0"
 
 [[deps.MacroTools]]
 git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
@@ -1815,9 +2078,9 @@ version = "0.5.16"
 
 [[deps.Makie]]
 deps = ["Animations", "Base64", "CRC32c", "ColorBrewer", "ColorSchemes", "ColorTypes", "Colors", "ComputePipeline", "Contour", "Dates", "DelaunayTriangulation", "Distributions", "DocStringExtensions", "Downloads", "FFMPEG_jll", "FileIO", "FilePaths", "FixedPointNumbers", "Format", "FreeType", "FreeTypeAbstraction", "GeometryBasics", "GridLayoutBase", "ImageBase", "ImageIO", "InteractiveUtils", "Interpolations", "IntervalSets", "InverseFunctions", "Isoband", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "MacroTools", "Markdown", "MathTeXEngine", "Observables", "OffsetArrays", "PNGFiles", "Packing", "Pkg", "PlotUtils", "PolygonOps", "PrecompileTools", "Printf", "REPL", "Random", "RelocatableFolders", "Scratch", "ShaderAbstractions", "SignedDistanceFields", "SparseArrays", "Statistics", "StatsBase", "StatsFuns", "StructArrays", "TriplotBase", "UnicodeFun", "Unitful"]
-git-tree-sha1 = "f2c8715d05bf10f9d4dc354e69dee30b6be53239"
+git-tree-sha1 = "efe001e1ee81b8eee0fe7da5a4328fcbbfd6b3aa"
 uuid = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-version = "0.24.13"
+version = "0.24.12"
 
     [deps.Makie.extensions]
     MakieDynamicQuantitiesExt = "DynamicQuantities"
@@ -1849,15 +2112,9 @@ version = "0.4.4"
 
 [[deps.MeshIO]]
 deps = ["ColorTypes", "FileIO", "GeometryBasics", "Printf"]
-git-tree-sha1 = "9b77b95be61c88dfaec00c0acfe39a6157131cdf"
+git-tree-sha1 = "c009236e222df68e554c7ce5c720e4a33cc0c23f"
 uuid = "7269a6da-0436-5bbc-96c2-40638cbb6118"
-version = "0.5.5"
-
-[[deps.MicrosoftMPI_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "bc95bf4149bf535c09602e3acdf950d9b4376227"
-uuid = "9237b28f-5490-5468-be7b-bb81f5f5e6cf"
-version = "10.1.4+3"
+version = "0.5.3"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1887,28 +2144,9 @@ version = "2025.11.4"
 
 [[deps.MuladdMacro]]
 deps = ["PrecompileTools"]
-git-tree-sha1 = "283bf85d4a767481dd924dff0eee1735e95f449e"
+git-tree-sha1 = "e8dcbeef032ba2f9051a44ac22b4e54e3a1a0099"
 uuid = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
-version = "0.2.7"
-
-[[deps.NFFT]]
-deps = ["AbstractNFFTs", "BasicInterpolators", "Distributed", "FFTW", "LinearAlgebra", "OhMyThreads", "PrecompileTools", "Printf", "Random", "Reexport", "SparseArrays", "SpecialFunctions"]
-git-tree-sha1 = "9a1ecb7604507a6c0c77723b93dba335b5029cb1"
-uuid = "efe261a4-0d2b-5849-be55-fc731d526b0d"
-version = "0.14.3"
-
-    [deps.NFFT.extensions]
-    NFFTGPUArraysExt = ["Adapt", "GPUArrays"]
-
-    [deps.NFFT.weakdeps]
-    Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
-    GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-
-[[deps.NFFTTools]]
-deps = ["AbstractFFTs", "AbstractNFFTs", "FFTW", "LinearAlgebra", "NFFT"]
-git-tree-sha1 = "6307fd141ca6df79fb88bbb9021e588ed71ba3e7"
-uuid = "7424e34d-94f7-41d6-98a0-85abaf1b6c91"
-version = "0.3.0"
+version = "0.2.6"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore", "ImageMetadata"]
@@ -1940,22 +2178,11 @@ git-tree-sha1 = "b6aa4566bb7ae78498a5e68943863fa8b5231b59"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.6+0"
 
-[[deps.OhMyThreads]]
-deps = ["BangBang", "ChunkSplitters", "ScopedValues", "StableTasks", "TaskLocalValues"]
-git-tree-sha1 = "ae638151254d159c4740d21a0820f17b7f74eb43"
-uuid = "67456a42-1dca-4109-a031-0a68de7e3ad5"
-version = "0.8.7"
-weakdeps = ["Markdown", "ProgressMeter"]
-
-    [deps.OhMyThreads.extensions]
-    MarkdownExt = "Markdown"
-    ProgressMeterExt = "ProgressMeter"
-
 [[deps.OpenBLASConsistentFPCSR_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "38a93f17e431141c6470bb67a88952a7c4f0e928"
+git-tree-sha1 = "dafdaa3ff15f20ff703d909d3a6f574a5b0586f3"
 uuid = "6cdc7f73-28fd-5e50-80fb-958a8875b1af"
-version = "0.3.34+0"
+version = "0.3.33+1"
 
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
@@ -1969,27 +2196,15 @@ uuid = "52e1d378-f018-4a11-a4be-720524705ac7"
 version = "0.3.3"
 
 [[deps.OpenEXR_jll]]
-deps = ["Artifacts", "Imath_jll", "JLLWrappers", "Libdl", "OpenJPH_jll", "Zlib_jll", "Zstd_jll", "libdeflate_jll"]
-git-tree-sha1 = "eb47260eaf61dca5c0e17bd126f4426edac35975"
+deps = ["Artifacts", "Imath_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
+git-tree-sha1 = "0d621a4beb5e48d195f907c3c5b0bea285d9ff9d"
 uuid = "18a262bb-aa17-5467-a713-aee519bc75cb"
-version = "3.5.2+0"
-
-[[deps.OpenJPH_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Libtiff_jll"]
-git-tree-sha1 = "1b1f3cabb1130670812b848f4623d69d578ea805"
-uuid = "95196869-6d61-5868-8eee-c38c33804e0c"
-version = "0.32.0+0"
+version = "3.4.13+0"
 
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
 version = "0.8.7+0"
-
-[[deps.OpenMPI_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "Hwloc_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIPreferences", "TOML", "Zlib_jll"]
-git-tree-sha1 = "0dba69ef957d790d41484ca7c20212c5ac806738"
-uuid = "fe0851c0-eecd-5654-98d4-656369965a5c"
-version = "5.0.14+0"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -2020,9 +2235,9 @@ version = "10.44.0+1"
 
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
-git-tree-sha1 = "123266c25174ef6c8d4718920abc206452cf8de6"
+git-tree-sha1 = "26766d4b5f1a410c218a19b85a672c6edb693c65"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
-version = "0.11.41"
+version = "0.11.40"
 weakdeps = ["StatsBase"]
 
     [deps.PDMats.extensions]
@@ -2048,15 +2263,15 @@ version = "0.5.12"
 
 [[deps.Pango_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "1912a9f1b9ca55005b03ba075f8e19993583e237"
+git-tree-sha1 = "58e5ed5e386e156bd93e86b305ebd21ac63d2d04"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
-version = "1.58.2+0"
+version = "1.57.1+0"
 
 [[deps.Parsers]]
-deps = ["Dates", "PrecompileTools"]
-git-tree-sha1 = "663e8b48b789916221e0765393b289ca6c88f24e"
+deps = ["Dates", "PrecompileTools", "UUIDs"]
+git-tree-sha1 = "32a4e09c5f29402573d673901778a0e03b0807b9"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "3.0.0"
+version = "2.8.6"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LLVMOpenMP_jll", "Libdl"]
@@ -2080,10 +2295,10 @@ uuid = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 version = "0.3.3"
 
 [[deps.PlotUtils]]
-deps = ["ColorSchemes", "Colors", "Dates", "PrecompileTools", "Printf", "Reexport", "Statistics"]
-git-tree-sha1 = "ddcc36fd83fb4cd459a53c891981697bde0d3de6"
+deps = ["ColorSchemes", "Colors", "Dates", "PrecompileTools", "Printf", "Random", "Reexport", "StableRNGs", "Statistics"]
+git-tree-sha1 = "26ca162858917496748aad52bb5d3be4d26a228a"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
-version = "1.5.1"
+version = "1.4.4"
 
 [[deps.PlutoTeachingTools]]
 deps = ["Downloads", "HypertextLiteral", "Latexify", "Markdown", "PlutoUI"]
@@ -2102,12 +2317,6 @@ git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
 uuid = "647866c9-e3ac-4575-94e7-e3d426903924"
 version = "0.1.2"
 
-[[deps.PooledArrays]]
-deps = ["DataAPI", "Future"]
-git-tree-sha1 = "36d8b4b899628fb92c2749eb488d884a926614d3"
-uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
-version = "1.4.3"
-
 [[deps.PrecompileTools]]
 deps = ["Preferences"]
 git-tree-sha1 = "edbeefc7a4889f528644251bdb5fc9ab5348bc2c"
@@ -2116,9 +2325,9 @@ version = "1.3.4"
 
 [[deps.Preferences]]
 deps = ["TOML"]
-git-tree-sha1 = "5005266de4bfe50e53ff44a5cb5c540b6e47a254"
+git-tree-sha1 = "8b770b60760d4451834fe79dd483e318eee709c4"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
-version = "1.6.0"
+version = "1.5.2"
 
 [[deps.Primes]]
 deps = ["IntegerMathUtils"]
@@ -2160,12 +2369,6 @@ version = "2.11.3"
     [deps.QuadGK.weakdeps]
     Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 
-[[deps.Quaternions]]
-deps = ["LinearAlgebra", "Random", "RealDot"]
-git-tree-sha1 = "4d8c1b7c3329c1885b857abb50d08fa3f4d9e3c8"
-uuid = "94ee1d12-ae83-5a48-8b1c-48b8ff168ae0"
-version = "0.7.7"
-
 [[deps.REPL]]
 deps = ["InteractiveUtils", "JuliaSyntaxHighlighting", "Markdown", "Sockets", "StyledStrings", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
@@ -2190,12 +2393,6 @@ weakdeps = ["FixedPointNumbers"]
 
     [deps.Ratios.extensions]
     RatiosFixedPointNumbersExt = "FixedPointNumbers"
-
-[[deps.RealDot]]
-deps = ["LinearAlgebra"]
-git-tree-sha1 = "9f0a1b71baaf7650f4fa8a1d168c7fb6ee41f0c9"
-uuid = "c1ae055f-0cd5-4b69-90a6-9a35b1a98df9"
-version = "0.1.0"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -2222,15 +2419,15 @@ version = "0.9.0"
 
 [[deps.Rmath_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "6d40b2fe70437b01397d2a4d5b020008da4e7019"
+git-tree-sha1 = "58cdd8fb2201a6267e1db87ff148dd6c1dbd8ad8"
 uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
-version = "0.5.2+0"
+version = "0.5.1+0"
 
 [[deps.Roots]]
 deps = ["Accessors", "CommonSolve", "Printf"]
-git-tree-sha1 = "e6ffa7bd4f8d0b8744d18f219304738d952f9a37"
+git-tree-sha1 = "91cfb1cb4f6e27557cc2df798a31eff6089a41eb"
 uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "3.0.11"
+version = "3.0.0"
 
     [deps.Roots.extensions]
     RootsChainRulesCoreExt = "ChainRulesCore"
@@ -2248,18 +2445,6 @@ version = "3.0.11"
     SymPyPythonCall = "bc8888f7-b21e-4b7c-a06a-5d9c9496438c"
     Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
-[[deps.Rotations]]
-deps = ["LinearAlgebra", "Quaternions", "Random", "StaticArrays"]
-git-tree-sha1 = "5680a9276685d392c87407df00d57c9924d9f11e"
-uuid = "6038ab10-8711-5258-84ad-4b1120ba62dc"
-version = "1.7.1"
-
-    [deps.Rotations.extensions]
-    RotationsRecipesBaseExt = "RecipesBase"
-
-    [deps.Rotations.weakdeps]
-    RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
-
 [[deps.RoundingEmulator]]
 git-tree-sha1 = "40b9edad2e5287e05bd413a38f61a8ff55b9557b"
 uuid = "5eaf0fd0-dfba-4ccb-bf02-d820a40db705"
@@ -2271,15 +2456,9 @@ version = "0.7.0"
 
 [[deps.SIMD]]
 deps = ["PrecompileTools"]
-git-tree-sha1 = "1ed93b3c4ffd33cc0c5d17eeb46f1b504ce42731"
+git-tree-sha1 = "e24dc23107d426a096d3eae6c165b921e74c18e4"
 uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "3.8.0"
-
-[[deps.ScopedValues]]
-deps = ["HashArrayMappedTries", "Logging"]
-git-tree-sha1 = "67a144433c4ce877ee6d1ada69a124d6b1ecf7be"
-uuid = "7e506255-f358-4e82-b7e4-beb19740aa63"
-version = "1.6.2"
+version = "3.7.2"
 
 [[deps.Scratch]]
 deps = ["Dates"]
@@ -2293,9 +2472,9 @@ version = "1.11.0"
 
 [[deps.ShaderAbstractions]]
 deps = ["ColorTypes", "FixedPointNumbers", "GeometryBasics", "LinearAlgebra", "Observables", "StaticArrays"]
-git-tree-sha1 = "57aa595158717ef165e6f5ab639fe2e3178c0a2b"
+git-tree-sha1 = "818554664a2e01fc3784becb2eb3a82326a604b6"
 uuid = "65257c39-d410-5151-9873-9b3e5be5013e"
-version = "0.5.1"
+version = "0.5.0"
 
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
@@ -2328,9 +2507,9 @@ version = "0.9.6"
 
 [[deps.Sixel]]
 deps = ["Dates", "FileIO", "ImageCore", "IndirectArrays", "OffsetArrays", "REPL", "libsixel_jll"]
-git-tree-sha1 = "2c79185e5261b159474903598c571ddd9f12ff7b"
+git-tree-sha1 = "0494aed9501e7fb65daba895fb7fd57cc38bc743"
 uuid = "45858cf5-a6b0-47a3-bbea-62219f50df47"
-version = "0.1.6"
+version = "0.1.5"
 
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
@@ -2349,18 +2528,19 @@ version = "1.12.0"
 
 [[deps.SpecialFunctions]]
 deps = ["IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "429071b23f4c9a13fb6582f807cc2ef454082408"
+git-tree-sha1 = "6547cbdd8ce32efba0d21c5a40fa96d1a3548f9f"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.9.0"
+version = "2.8.0"
 weakdeps = ["ChainRulesCore"]
 
     [deps.SpecialFunctions.extensions]
     SpecialFunctionsChainRulesCoreExt = "ChainRulesCore"
 
-[[deps.StableTasks]]
-git-tree-sha1 = "c4f6610f85cb965bee5bfafa64cbeeda55a4e0b2"
-uuid = "91464d47-22a1-43fe-8b7f-2d57ee82463f"
-version = "0.1.7"
+[[deps.StableRNGs]]
+deps = ["Random"]
+git-tree-sha1 = "4f96c596b8c8258cc7d3b19797854d368f243ddc"
+uuid = "860ef19b-820b-49d6-a774-d7a799459cd3"
+version = "1.0.4"
 
 [[deps.StackViews]]
 deps = ["OffsetArrays"]
@@ -2370,9 +2550,9 @@ version = "0.1.2"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "PrecompileTools", "Random", "StaticArraysCore"]
-git-tree-sha1 = "de349d5585559b692f518b6d3fc7c179d64b2364"
+git-tree-sha1 = "246a8bb2e6667f832eea063c3a56aef96429a3db"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.9.23"
+version = "1.9.18"
 weakdeps = ["ChainRulesCore", "Statistics"]
 
     [deps.StaticArrays.extensions]
@@ -2386,9 +2566,9 @@ version = "1.4.4"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "e2b53ce13a53367e96601081e33d34746b571bad"
+git-tree-sha1 = "ae3bb1eb3bba077cd276bc5cfc337cc65c3075c0"
 uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-version = "1.11.5"
+version = "1.11.1"
 weakdeps = ["SparseArrays"]
 
     [deps.Statistics.extensions]
@@ -2402,40 +2582,33 @@ version = "1.8.0"
 
 [[deps.StatsBase]]
 deps = ["AliasTables", "DataAPI", "DataStructures", "IrrationalConstants", "LinearAlgebra", "LogExpFunctions", "Missings", "Printf", "Random", "SortingAlgorithms", "SparseArrays", "Statistics", "StatsAPI"]
-git-tree-sha1 = "adb9da019510162e67a4493fc235c23203d8b09e"
+git-tree-sha1 = "e4d7a1a0edc20af42689ea6f4f3587a2175d50ee"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
-version = "0.34.13"
+version = "0.34.12"
 
 [[deps.StatsFuns]]
 deps = ["HypergeometricFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "91a5737baed20ee31f3faea0e51f57461f6a689e"
+git-tree-sha1 = "770240df9a3b8888065046948f7a09b4e0f997d5"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "2.2.1"
+version = "2.2.0"
 weakdeps = ["ChainRulesCore", "InverseFunctions"]
 
     [deps.StatsFuns.extensions]
     StatsFunsChainRulesCoreExt = "ChainRulesCore"
     StatsFunsInverseFunctionsExt = "InverseFunctions"
 
-[[deps.StringEncodings]]
-deps = ["Libiconv_jll"]
-git-tree-sha1 = "b765e46ba27ecf6b44faf70df40c57aa3a547dcb"
-uuid = "69024149-9ee7-55f6-a4c4-859efe599b68"
-version = "0.3.7"
-
 [[deps.StructArrays]]
 deps = ["ConstructionBase", "DataAPI", "Tables"]
-git-tree-sha1 = "4daaddbe37aa80b4551bf7c56adf53e7cfcdf35a"
+git-tree-sha1 = "ad8002667372439f2e3611cfd14097e03fa4bccd"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
-version = "0.7.4"
+version = "0.7.3"
 
     [deps.StructArrays.extensions]
-    AdaptExt = "Adapt"
-    GPUArraysCoreExt = "GPUArraysCore"
-    KernelAbstractionsExt = "KernelAbstractions"
-    LinearAlgebraExt = "LinearAlgebra"
-    SparseArraysExt = "SparseArrays"
-    StaticArraysExt = "StaticArrays"
+    StructArraysAdaptExt = "Adapt"
+    StructArraysGPUArraysCoreExt = ["GPUArraysCore", "KernelAbstractions"]
+    StructArraysLinearAlgebraExt = "LinearAlgebra"
+    StructArraysSparseArraysExt = "SparseArrays"
+    StructArraysStaticArraysExt = "StaticArrays"
 
     [deps.StructArrays.weakdeps]
     Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -2447,18 +2620,16 @@ version = "0.7.4"
 
 [[deps.StructUtils]]
 deps = ["Dates", "UUIDs"]
-git-tree-sha1 = "b814d5005d6a529d740ffe06f8a86396f6501138"
+git-tree-sha1 = "82bee338d650aa515f31866c460cb7e3bcef90b8"
 uuid = "ec057cc2-7a8d-4b58-b3b3-92acb9f63b42"
-version = "2.9.2"
+version = "2.8.2"
 
     [deps.StructUtils.extensions]
-    StructUtilsLazilyInitializedFieldsExt = ["LazilyInitializedFields"]
     StructUtilsMeasurementsExt = ["Measurements"]
     StructUtilsStaticArraysCoreExt = ["StaticArraysCore"]
     StructUtilsTablesExt = ["Tables"]
 
     [deps.StructUtils.weakdeps]
-    LazilyInitializedFields = "0e77f7df-68c5-4e49-93ce-4cd80f5598bf"
     Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
     StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
     Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
@@ -2489,19 +2660,14 @@ version = "1.0.1"
 
 [[deps.Tables]]
 deps = ["DataAPI", "DataValueInterfaces", "IteratorInterfaceExtensions", "OrderedCollections", "TableTraits"]
-git-tree-sha1 = "a94d9bdda1b7bed0046cea645639ab3f62196fac"
+git-tree-sha1 = "0f38a06c83f0007bbab3cf911262841c9a0f07e0"
 uuid = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
-version = "1.14.0"
+version = "1.13.0"
 
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
-
-[[deps.TaskLocalValues]]
-git-tree-sha1 = "67e469338d9ce74fc578f7db1736a74d93a49eb8"
-uuid = "ed4db957-447d-4319-bfb6-7fa9ae7ecf34"
-version = "0.1.3"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
@@ -2536,9 +2702,9 @@ uuid = "981d1d27-644d-49a2-9326-4793e63143c3"
 version = "0.1.0"
 
 [[deps.URIs]]
-git-tree-sha1 = "908fec9df6c5de98548ead82a468c95ccf6cd263"
+git-tree-sha1 = "bef26fb046d031353ef97a82e3fdb6afe7f21b1a"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
-version = "1.7.0"
+version = "1.6.1"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -2557,9 +2723,9 @@ version = "0.4.1"
 
 [[deps.Unitful]]
 deps = ["Dates", "LinearAlgebra", "Random"]
-git-tree-sha1 = "1f0f9f401753701a7e4113b5056ca38d33875b55"
+git-tree-sha1 = "57e1b2c9de4bd6f40ecb9de4ac1797b81970d008"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
-version = "1.29.0"
+version = "1.28.0"
 
     [deps.Unitful.extensions]
     ConstructionBaseUnitfulExt = "ConstructionBase"
@@ -2596,17 +2762,11 @@ git-tree-sha1 = "248a7031b3da79a127f14e5dc5f417e26f9f6db7"
 uuid = "efce3f68-66dc-5838-9240-27a6d6f5f9b6"
 version = "1.1.0"
 
-[[deps.XML2_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
-git-tree-sha1 = "b826aedca5fce2e3c91904e338c279e5c1a2da74"
-uuid = "02c8fc9c-b97f-50b9-bbe4-9be30ff0a78a"
-version = "2.15.4+0"
-
 [[deps.XZ_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "e52eca002a11c30a858185efdfb15311e1c7a6bf"
+git-tree-sha1 = "b29c22e245d092b8b4e8d3c09ad7baa586d9f573"
 uuid = "ffd25f8a-64ca-5728-b0f7-c24cf3aae800"
-version = "5.8.4+0"
+version = "5.8.3+0"
 
 [[deps.Xorg_libX11_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libxcb_jll", "Xorg_xtrans_jll"]
@@ -2646,9 +2806,9 @@ version = "6.0.2+0"
 
 [[deps.Xorg_libXi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll", "Xorg_libXfixes_jll"]
-git-tree-sha1 = "dcb316b3ce0941f195537dda56bea4517fcd3ff5"
+git-tree-sha1 = "a376af5c7ae60d29825164db40787f15c80c7c54"
 uuid = "a51aa0fd-4e3c-5386-b890-e753decda492"
-version = "1.8.4+0"
+version = "1.8.3+0"
 
 [[deps.Xorg_libXinerama_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libXext_jll"]
@@ -2688,15 +2848,15 @@ version = "1.2.0+0"
 
 [[deps.Xorg_xkbcomp_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libxkbfile_jll"]
-git-tree-sha1 = "9a5e6e8f1a7c40941465c04840145e527f0d6b4b"
+git-tree-sha1 = "801a858fc9fb90c11ffddee1801bb06a738bda9b"
 uuid = "35661453-b289-5fab-8a00-3d9160c6a3a4"
-version = "1.5.0+0"
+version = "1.4.7+0"
 
 [[deps.Xorg_xkeyboard_config_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_xkbcomp_jll"]
-git-tree-sha1 = "df77b22eb77051b3d0ef30aab979684f7482c66f"
+git-tree-sha1 = "ed349d26affcacafbc7fc2941ace1fb98f71e715"
 uuid = "33bec58e-1273-512f-9401-5d533626f822"
-version = "2.48.0+0"
+version = "2.47.0+1"
 
 [[deps.Xorg_xtrans_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2715,89 +2875,23 @@ git-tree-sha1 = "446b23e73536f84e8037f5dce465e92275f6a308"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
 version = "1.5.7+1"
 
-[[deps.aws_c_auth_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_cal_jll", "aws_c_http_jll", "aws_c_sdkutils_jll"]
-git-tree-sha1 = "8cab83c96af80a1be968251ce1a0548a7545484d"
-uuid = "2b3700d1-4306-52e2-a478-c162f0c514be"
-version = "0.9.6+0"
-
-[[deps.aws_c_cal_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_common_jll"]
-git-tree-sha1 = "22c0f42f4a1f0dc5dcfa8fd267c4ac407c455e7a"
-uuid = "70f11efc-bab2-57f1-b0f3-22aad4e67c4b"
-version = "0.9.13+0"
-
-[[deps.aws_c_common_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "a759cb9bf456ad792cc7898a81ae333cce9ef02a"
-uuid = "73048d1d-b8c4-5092-a58d-866c5e8d1e50"
-version = "0.12.6+0"
-
-[[deps.aws_c_compression_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_common_jll"]
-git-tree-sha1 = "7910c72f45f44afd297c39fe43b99c56d5ed22ec"
-uuid = "73a04cd5-f3d7-5bac-9290-e8adb709f224"
-version = "0.3.2+0"
-
-[[deps.aws_c_http_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_compression_jll", "aws_c_io_jll"]
-git-tree-sha1 = "3fb8685778068de502c72fec5dd8075e037cee15"
-uuid = "3254fc65-9028-534d-aa9d-d76d128babc6"
-version = "0.10.15+0"
-
-[[deps.aws_c_io_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_cal_jll", "aws_c_common_jll", "s2n_tls_jll"]
-git-tree-sha1 = "7e481d474b2087ee8bbf55b81bf9119f21e396d9"
-uuid = "13c41daa-f319-5298-b5eb-5754e0170d52"
-version = "0.26.3+0"
-
-[[deps.aws_c_s3_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_auth_jll", "aws_c_common_jll", "aws_c_http_jll", "aws_checksums_jll", "s2n_tls_jll"]
-git-tree-sha1 = "3e9917ab25114feba657e71be41cad068b9f6595"
-uuid = "bd1f34fb-993f-5903-a121-aaf302eed6d4"
-version = "0.11.5+0"
-
-[[deps.aws_c_sdkutils_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_common_jll"]
-git-tree-sha1 = "c43dfba2c1ab9ea9f02f2c80e86fa16f6460244e"
-uuid = "1282aa60-004d-510b-9f52-12498d409daa"
-version = "0.2.4+1"
-
-[[deps.aws_checksums_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "aws_c_common_jll"]
-git-tree-sha1 = "2570c8e23f4771a087b12a47edcaaa670ac05a01"
-uuid = "b2a88e68-78e7-5e94-8c20-c02986ec140e"
-version = "0.2.10+0"
-
-[[deps.dlfcn_win32_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "e141d67ffe550eadfb5af1bdbdaf138031e4805f"
-uuid = "c4b69c83-5512-53e3-94e6-de98773c479f"
-version = "1.4.2+0"
-
 [[deps.isoband_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "51b5eeb3f98367157a7a12a1fb0aa5328946c03c"
 uuid = "9a68df92-36a6-505f-a73e-abb412b6bfb4"
 version = "0.2.3+0"
 
-[[deps.libaec_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "60f4792734488db6f42e2c7699f1d4594780bd03"
-uuid = "477f73a3-ac25-53e9-8cc3-50b2fa2566f0"
-version = "1.1.7+0"
-
 [[deps.libaom_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "1210ba774d3427387d307bf1f416d699b7c39417"
+git-tree-sha1 = "850b06095ee71f0135d644ffd8a52850699581ed"
 uuid = "a4ae2306-e953-59d6-aa16-d00cac43593b"
-version = "3.15.1+0"
+version = "3.13.3+0"
 
 [[deps.libass_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "cb007192783c56d8249db4cf0e3495001edfe414"
+git-tree-sha1 = "125eedcb0a4a0bba65b657251ce1d27c8714e9d6"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
-version = "0.17.5+0"
+version = "0.17.4+0"
 
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -2810,17 +2904,11 @@ git-tree-sha1 = "9bf7903af251d2050b467f76bdbe57ce541f7f4f"
 uuid = "1183f4f0-6f2a-5f1a-908b-139f9cdfea6f"
 version = "0.2.2+0"
 
-[[deps.libdeflate_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "7ee221abc4f125ce18e73d48367cde0e16bc93b9"
-uuid = "46979653-d7f6-5232-b59e-dd310c4598de"
-version = "1.26.0+0"
-
 [[deps.libdrm_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libpciaccess_jll"]
-git-tree-sha1 = "28e57478e8a160d346a19c28b3fffb9273bcc9c2"
+git-tree-sha1 = "63aac0bcb0b582e11bad965cef4a689905456c03"
 uuid = "8e53e030-5e6c-5a89-a30b-be5b7263a166"
-version = "2.4.134+0"
+version = "2.4.125+1"
 
 [[deps.libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2830,15 +2918,15 @@ version = "2.0.4+0"
 
 [[deps.libpng_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "1fcd6cf05d23adab0b5ffc496d020537215751dc"
+git-tree-sha1 = "e51150d5ab85cee6fc36726850f0e627ad2e4aba"
 uuid = "b53b4c65-9356-5827-b1ea-8c7a1a84506f"
-version = "1.6.59+1"
+version = "1.6.58+0"
 
 [[deps.libsixel_jll]]
 deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "libpng_jll"]
-git-tree-sha1 = "e067c8bae65bb40866552296a2d5b4dc65b8928f"
+git-tree-sha1 = "c1733e347283df07689d71d61e14be986e49e47a"
 uuid = "075b6546-f08a-558a-be8f-8157d0f608a5"
-version = "1.80.702+0"
+version = "1.10.5+0"
 
 [[deps.libva_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Xorg_libX11_jll", "Xorg_libXext_jll", "Xorg_libXfixes_jll", "libdrm_jll"]
@@ -2854,37 +2942,19 @@ version = "1.3.8+0"
 
 [[deps.libwebp_jll]]
 deps = ["Artifacts", "Giflib_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libglvnd_jll", "Libtiff_jll", "libpng_jll"]
-git-tree-sha1 = "52d3b9475133c3bc8c0a7f90f18bfc8cdb5a443a"
+git-tree-sha1 = "4e4282c4d846e11dce56d74fa8040130b7a95cb3"
 uuid = "c5f90fcd-3b7e-5836-afba-fc50a0988cb2"
-version = "1.6.1+0"
-
-[[deps.mpif_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIABI_jll", "MPICH_jll", "MPIPreferences", "MPItrampoline_jll", "MicrosoftMPI_jll", "OpenMPI_jll", "TOML"]
-git-tree-sha1 = "a06fcd368cfe6fe2c0eb7b63320d4d27ddcd010d"
-uuid = "9aeb927a-4695-514f-a259-621a69f20ec0"
-version = "1.0.0+0"
+version = "1.6.0+0"
 
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.64.0+1"
 
-[[deps.oneTBB_jll]]
-deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
-git-tree-sha1 = "ed2d8d4ad96c03d3abe3382cdbbdea9489b63636"
-uuid = "1317d2d5-d96f-522e-a858-c73665f53c3e"
-version = "2023.1.0+0"
-
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 version = "17.7.0+0"
-
-[[deps.s2n_tls_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "d6cfe0874f96962fe4b20ed8bdb71c467e09c2c6"
-uuid = "cddc5d3d-934d-5d3a-9747-62fc12ea3f48"
-version = "1.7.11+0"
 
 [[deps.x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2906,68 +2976,111 @@ version = "1.13.0+0"
 """
 
 # ╔═╡ Cell order:
-# ╟─ce848b7e-c939-11f1-b0e6-0b6babc5505a
-# ╟─ce857734-c939-11f1-a910-9de016fca185
-# ╠═ce857766-c939-11f1-a743-c7bd01aef4da
-# ╠═ce857782-c939-11f1-b207-a90fed7c07e9
-# ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
-# ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
-# ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
-# ╟─ce8577b6-c939-11f1-8693-11da8d5aab7f
-# ╟─fdb70cb8-888b-4434-9e60-7640310316a2
-# ╠═ce85782e-c939-11f1-bff0-ef3fa59f69b9
-# ╠═3446bc33-766b-4b43-8f9a-07afd4268858
-# ╠═ce8577de-c939-11f1-a210-174d90077116
-# ╠═3f203e31-8624-4aea-b1e2-faecc9d12c80
-# ╠═2b0225c8-1b33-4997-87b3-8dc8544b945c
-# ╟─ce8577d4-c939-11f1-ae8b-c7f121718b79
-# ╠═6e0f5aaf-9af1-497a-a9e9-361c0e11b43c
-# ╟─c66709c1-a212-4f3b-8c19-e768dbb71682
-# ╟─bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
-# ╟─a0c85fd8-297c-42cf-9cb9-8575709815e4
-# ╟─dad5a8ee-75d3-4418-b876-a2a11099d636
-# ╟─3af34ce3-2789-49a6-b18b-a1beb5120d03
-# ╟─af5db716-1396-4805-bf1f-4c2e87f07396
-# ╟─1f4777bc-a37a-486c-ba88-7ffb4944a9b4
-# ╟─109778b6-7d2f-49a3-9982-28d34c61910e
-# ╟─43db9278-c188-461a-968b-027873fe221a
-# ╠═5bebe206-d3e9-4812-b6c0-f8ae279b6f78
-# ╠═5d9e5be7-c056-4baa-9d72-a85038baf551
-# ╟─1f9a7a3c-a646-45c0-bcd3-efbffa16504d
-# ╟─ce857914-c939-11f1-ac3e-09bdb3a2341f
-# ╟─4974b708-e9db-4214-82d9-966c52230bd9
-# ╟─aa8bc3c9-bb5f-4983-b055-e46c44bc34e2
-# ╟─2d19ae25-3338-49c8-8f8e-250ba4c92d42
-# ╟─e39eb57f-c010-4c88-ba03-2699c268aaad
-# ╟─d24a7403-5615-4d9d-833f-d808947be37b
-# ╟─10f8f35f-f43b-4054-b3fb-ad12925a668f
-# ╟─dc350c3a-542a-4726-9c48-605be648bb87
-# ╟─60635396-7db8-4d90-a32b-b1a6704bbf8c
-# ╟─b1ef0ba6-b06a-400c-bf30-12763631f400
-# ╟─7d052ad4-3902-4479-ad06-10430b341958
-# ╟─ce857978-c939-11f1-adf3-c3c0894ef2f2
-# ╟─74504ba7-0e74-4482-95eb-8a019bdb27a0
-# ╟─fd195341-4cd5-4577-bb23-a5a062338b90
-# ╟─9d03e74b-9ec2-49a7-8bce-bffabc2b49a2
-# ╟─c02b8f3a-012b-402e-bcbf-127de67dc381
-# ╟─64f8c17b-7f1b-4abe-96d1-28de47b14787
-# ╟─9e94dc41-0719-4da3-aa32-b13e7f7658c4
-# ╟─828be7e3-10a7-456e-b808-caf40e2a5e5a
-# ╟─9db04e02-47ec-4410-bca1-76634c04d2e0
-# ╟─b33cd29e-7a0e-4747-aa4f-16f40f1bea72
-# ╟─7dda83db-4263-4851-b97e-62b9f5fa6d17
-# ╟─3a1fec8b-05f4-4db3-9ec4-6c6333cd3a53
-# ╟─c2f189ca-18fe-4bfc-ba2a-327c1c05adb6
-# ╟─3824b2f4-f792-4e89-8750-7950417e8493
-# ╟─e97fe6fa-9ae7-49ae-aa4f-5af1ada736b2
-# ╟─f66d9ef4-8f6b-42dc-8c06-2c208ae2d962
-# ╟─40ff487e-bb9e-4d3c-84e2-31f8456ebede
-# ╠═92254584-fdbe-4f90-8b63-a5389166c141
-# ╠═8e7399e4-776e-4410-849e-5e719d324002
-# ╠═c8f88fe3-6bb6-4d6e-88cf-10387e7acd7f
-# ╠═7272b9f1-97bc-4cc6-9f4f-078219220b8c
-# ╟─ce857c34-c939-11f1-8a90-dbf15df7b4a9
-# ╟─ce857c48-c939-11f1-b7d9-25caffb70cd2
-# ╟─ce857c52-c939-11f1-a1a6-0357bdfc8bdc
+# ╟─c75a6f71-b75e-4269-8c80-0597bb15d96a
+# ╠═c33b213e-7656-11f1-a001-f39f9cc685b2
+# ╠═95e43cd5-9266-4eff-ad38-ab2393985ffd
+# ╠═9fd5b724-4634-4fd9-b397-bc1e8161394d
+# ╠═c3d72b3f-1467-46fa-a964-387c625fcd2f
+# ╠═c0f34433-f007-4a7f-b2e8-d33f14bd7a67
+# ╠═9eede586-5ede-431e-be8c-8dc1a4869b5c
+# ╠═066f2d77-4a57-4396-a86a-9b5eed5e7896
+# ╠═0c73051a-f356-4094-9250-2cb1cc72201d
+# ╠═feb49760-e9de-4738-82cb-d2fa9c8b1376
+# ╟─4cecb481-e70f-4ed6-8a16-90ba400eed97
+# ╠═53bc8b12-8aa9-47f8-8749-0c7aebca433a
+# ╟─43302385-ba8a-4e7b-9cff-2c5bf977d5b8
+# ╠═090d5994-6e13-4178-b0ab-ef62e1e0258d
+# ╠═1eb4b0bd-857a-4a94-ac67-67c598b721fa
+# ╠═be57d254-3fe7-44a5-85df-7483f8f4854b
+# ╠═f0697055-ac59-4906-925c-c25233d85bae
+# ╠═e0b63072-46d2-4cf1-9e86-68658977f438
+# ╠═cd76a5df-6a9a-428e-af83-6d904c1b50b0
+# ╠═1cfb4b83-7b50-449e-94d4-52e751ae4180
+# ╠═3c9b9f6f-f117-4513-8a82-8bafcaacee64
+# ╠═fdee56d8-22d4-40d1-b59d-3ea436effb7a
+# ╠═209e3560-56d0-4f97-8d47-d2fb30c6a145
+# ╠═8a41e907-2d6e-4fba-b750-bde13f044ed7
+# ╠═54b0044e-b662-4034-a844-6421b0a0af56
+# ╠═cb2b9cd3-41bc-4c08-a2d0-90fd9fe935ef
+# ╟─07bfc15b-24c8-44e4-932f-6e19d8eab264
+# ╠═5ceb34a1-b95c-4bf8-aba2-71123881ee9b
+# ╠═7f6c4af9-5c2a-48a7-a247-61a1b2d43e74
+# ╠═3029554d-0ecf-4bb3-84be-3ce0f16dfc2c
+# ╟─e29d1009-e681-4ac7-8795-dd87b3cd29e3
+# ╠═44e3eaa0-43d0-4d22-bbe9-bf5d3c8264eb
+# ╠═84ce7725-9300-499c-bf2f-294587347720
+# ╠═8447240b-27a2-4df5-9366-2fad126a1651
+# ╠═0d6fd1d2-43ee-4f73-ab89-fe486293bd1f
+# ╠═2307f7ec-b5bb-4bf4-807d-458b04b87e29
+# ╠═d7260975-4ba0-414e-8493-ecb35d674f9e
+# ╠═44151964-9080-4975-a05f-de08a201df72
+# ╠═342d3039-4d5f-4493-af7b-fb83d31df08f
+# ╠═9ca8976b-6ed4-4670-ab53-a1c65f0a628a
+# ╠═b7d18ce7-56ee-4924-8142-83e0cbfae698
+# ╠═20ad0308-6775-4650-93ce-8fe5f66dc746
+# ╠═a5c1e8c7-f2a9-4a4b-941a-c8b73a191a63
+# ╠═a6e7c563-0b40-4d0f-9f87-361c169501ab
+# ╠═816dfb87-d5c0-41e4-872e-e29319035047
+# ╠═71855601-5211-494a-a916-df606c4928c9
+# ╠═2e2a2750-fa16-437b-b313-6b20e966e814
+# ╠═e9adf55b-0851-4c1b-a468-c1e42d0389b8
+# ╠═34f5d1f9-3add-44d8-ad05-4acb08921d82
+# ╠═07344fa6-7082-4cf9-a0ac-1c6230d967c2
+# ╠═8add0d61-2a42-49e4-927a-c0b1132503f5
+# ╠═a437b267-089e-48bf-85cf-a0288a99a294
+# ╠═63cb3219-59e0-4413-bb0a-ab65a0217a84
+# ╠═e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
+# ╠═a8a706b8-5063-4997-b454-2cc915a1d3ed
+# ╠═0c9e9709-0f08-42cf-8ebe-34fb924364a9
+# ╠═e3fa2fc9-443f-4590-bfc2-32c346c70b4d
+# ╠═70f9159c-0aa8-41f4-bea6-959e697ea3d1
+# ╠═cd4c5b9d-4e23-48d1-afa1-781d86563a1f
+# ╠═0415830d-0026-4392-8b0d-f699fe445cea
+# ╠═3698965a-6f37-4639-823f-cdc679d9dffb
+# ╠═0bbfc3dc-0e4b-498f-a966-50d46d31956f
+# ╠═9094e9ad-392c-454d-aa8c-25cd567d900e
+# ╠═ded0162b-4785-4b3f-8c2f-3b112bcf951d
+# ╠═bccdb23f-057c-471b-8257-0851fdd9b853
+# ╠═4b629172-2340-4dab-a73a-0aabbea61011
+# ╠═34270e18-f966-49bb-9a0c-d39272ecbd43
+# ╠═1baac32b-9472-48e4-bcd9-19bf34735784
+# ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
+# ╠═f0f11355-abc5-4c3c-af7c-cffc781cb316
+# ╠═055cf6ac-2855-4f29-acbb-583d9a415d82
+# ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
+# ╟─5a11e3bb-1309-4689-9d2a-7d9e85765abb
+# ╠═c33841ff-c67a-49ca-bcef-d05a5ac3d842
+# ╠═a393c627-906d-4996-bbbd-cdf20c1db112
+# ╠═7d821ff3-fcd9-485d-8941-336745c0a35d
+# ╠═822102cb-52e3-4184-b74d-283275f3a291
+# ╠═e520500b-036c-4d84-b15c-9163ec2783a6
+# ╠═0f21e602-1779-45fc-ae8a-ae920f69e9fb
+# ╠═bb5d8129-8f07-40a8-8527-26bb53ab7d3f
+# ╠═530aae7d-c72f-4bc9-928a-ec75b3866d64
+# ╠═b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
+# ╠═2d44ed1c-54b8-4bdf-a853-255e22466e53
+# ╠═6ccbe255-748e-4e5a-bb3d-68500d1838be
+# ╠═0a2d3298-6c32-4c3d-a141-bd8c7a38655c
+# ╠═89458e61-c069-439e-a5bb-bc007d842af1
+# ╠═dc71cc6e-2543-4b8d-a0dc-9832b64165ff
+# ╠═c9ee5f52-df6b-4124-bd3c-f9c85f0323bc
+# ╠═fef04dea-83d3-4c96-9331-68d3fde6cfc0
+# ╠═245aae0e-cba5-465f-a5b1-3443da3247f5
+# ╠═606f97b6-4693-44e8-bc76-34c656e1f047
+# ╠═f93cfa73-67a0-4474-95c0-e468915c25bc
+# ╠═10498091-e583-442e-9ec4-b565a6cf61ce
+# ╠═7afc5069-a10f-435a-8f1f-277821ff6b72
+# ╠═4c29f5d6-db13-4111-ba6e-774a661b8692
+# ╠═680ec799-71a7-4cd7-b8a2-f213a7a747b8
+# ╠═5eb70803-f9bd-4073-b990-0ea723d9cb45
+# ╠═8e934f39-a170-4766-8f8b-50e9b559a67d
+# ╠═b4da11f5-b126-4bf8-8e4c-1d44ea22823c
+# ╠═f797b917-7a76-443a-8154-3bc1b047f928
+# ╠═8faec62d-8380-4b2a-8440-2040e132e98c
+# ╠═e6feb149-6c5e-4473-9512-cb8361cf1a46
+# ╟─490b4cf7-4bfe-4893-89e4-3beb825a7960
+# ╠═54e96133-f840-41ee-bac5-db8dc7c196f3
+# ╠═7b3c69ad-33ef-4791-9dc4-16171aadfb8e
+# ╟─71e31c86-ba5e-452b-8233-bc44861fdfa6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
