@@ -19,10 +19,13 @@ makedocs(;
                                     "EPG" => "2-2-EPG.md",
                                     "Slice Selection" => "2-3-slice_selection.md",],
         "MRI Reconstruction" => ["Basic Reconstruction" => "3-1-basic_reconstruction.md",
-                                    "Advanced Reconstruction" => "3-2-advanced_reconstruction.md"],
+                                    "Advanced Reconstruction" => "3-2-advanced_reconstruction.md",
+ 				   "EPI Reconstruction" => "3-3-EPI.md"],
         "Sequence programming" => ["Pulseq - Basics" => "4-1-pulseq_basic.md",
                                     "Practical - Gradient echo" => "4-1-pulseq_practical.md",
                                     "Homework - Multi-spin echo" => "4-2-mse_homework.md",],
+       "Motion Artefacts" => ["Intra-scan motion" => "5-1-motion_correction.md"],
+
         ],
 )
 
