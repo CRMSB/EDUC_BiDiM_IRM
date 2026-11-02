@@ -22,7 +22,9 @@ makedocs(;
                                     "Advanced Reconstruction" => "3-2-advanced_reconstruction.md"],
         "Sequence programming" => ["Pulseq - Basics" => "4-1-pulseq_basic.md",
                                     "Practical - Gradient echo" => "4-1-pulseq_practical.md",
-                                    "Homework - Multi-spin echo" => "4-2-mse_homework.md",],
+                                    "Simulation and reconstruction" => "4-3-simulation_reconstruction.md",
+                                    "Homework - Multi-spin echo" => "4-2-mse_homework.md",
+                                    ],
         ],
 )
 
