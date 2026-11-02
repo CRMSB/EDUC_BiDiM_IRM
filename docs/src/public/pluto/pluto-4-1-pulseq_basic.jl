@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.28
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -86,11 +86,12 @@ KomaMRI.jl reads, writes and **simulates** Pulseq sequences. Its `PulseDesigner`
 | `make_trapezoid` | a trapezoidal gradient |
 | `make_adc` | an ADC event |
 | `make_delay` | a delay (empty block) |
+| `make_label` | a label (line number, repetition... for the reconstruction) |
 | `@addblock seq += (...)` | adds a block to the sequence |
 | `check_timing` | checks rasters, dead times and ring-down |
 | `write_seq` | writes the `.seq` file |
 
-The same sequence object can then be **simulated** with KomaMRI (next part of the course) and run on the scanner.
+The same sequence object can then be **simulated** with KomaMRI (notebook 4-3 *Simulation and reconstruction*) and run on the scanner.
 
 ## 1.3 Units
 
@@ -559,6 +560,173 @@ For the excitation pulse of section 4.3 (``T_{rf}`` = 3 ms, TBW = 4, ``\Delta z`
 Rephaser area : $(round(area(gzr_ex) * γ̄, digits=1)) m⁻¹ = $(round(area(gzr_ex) / area(gz_ex), digits=3)) × area(``G_z``).
 """
 
+# ╔═╡ db148658-cedd-11f1-b46f-aae81d03624e
+md"""
+## 5.6 Durations: always use `sys`
+
+To compute a delay (`make_delay(d)`), we need the duration of the other blocks. A block lasts as long as its longest event, but the time an event really occupies in a block depends on the **scanner**:
+
+* after an RF pulse, the block must last at least the **RF ring-down** time (`RF_ring_down_time`),
+* after the last ADC sample, the block must last at least the **ADC dead time** (`ADC_dead_time`),
+* the RF and ADC samples are placed at the **center** of their raster intervals: the event occupies half an interval more at its edges.
+
+These are properties of the scanner: they are stored in `sys`, **not in the events**. KomaMRI therefore gives two durations:
+
+| | what it measures |
+|:--|:--|
+| `dur(event)` | the event alone (up to its last sample, or the end of the gradient) |
+| `dur(event, sys)` | the time the event **occupies in a block**: with the ring-down, the ADC dead time and the sample edges |
+
+Only `dur(event, sys)` can be used to compute a block duration or a delay. With `dur(event)`, the block is too short: `check_timing` rejects the sequence or, if it is not checked, the next block starts during the ringing of the RF coil (e.g. an ADC records it).
+
+*In pypulseq, `calc_duration(event)` corresponds to `dur(event, sys)`: the ring-down and the dead times are copied into each event when it is created with `system=...`.*
+
+For the events of section 4.3 and a readout:
+"""
+
+# ╔═╡ db148716-cedd-11f1-b46f-aae81d03624e
+let
+	gx_demo = make_trapezoid(; flat_area=32 / 0.256, flat_time=32 * 20e-6, sys)
+	adc_demo = make_adc(32; dwell=20e-6, delay=gx_demo.rise, sys)
+	events = [("RF pulse (section 4.3)", rf_ex, "RF ring-down (20 µs) + half an RF raster"),
+		("slice-selection gradient", gz_ex, "none: the duration of a gradient does not depend on sys"),
+		("ADC (32 samples, dwell 20 µs)", adc_demo, "ADC dead time (10 µs) + half a dwell")]
+	rows = ["| $(n) | $(round(dur(e) * 1e6, digits=1)) | $(round(dur(e, sys) * 1e6, digits=1)) | $(round((dur(e, sys) - dur(e)) * 1e6, digits=1)) | $(why) |" for (n, e, why) in events]
+	Markdown.parse("| event | `dur(event)` (µs) | `dur(event, sys)` (µs) | difference (µs) | why |\n|:--|--:|--:|--:|:--|\n" * join(rows, "\n"))
+end
+
+# ╔═╡ db1486f8-cedd-11f1-b46f-aae81d03624e
+md"""
+The block duration is then the **longest** event, rounded **up** to the block duration raster: this is what the function `block_duration(events...)` below does.
+"""
+
+# ╔═╡ db1486c6-cedd-11f1-b46f-aae81d03624e
+"""
+    block_duration(events...; sys=sys)
+
+Duration of a block containing `events` (RF, gradients, ADC) : longest event, including
+the RF ring-down and the ADC dead time, rounded up to the block duration raster.
+"""
+block_duration(events...; sys=sys) = ceil_to_raster(maximum(dur(e, sys) for e in events), sys.limits.DUR_Δt)
+
+# ╔═╡ db148734-cedd-11f1-b46f-aae81d03624e
+md"""
+**Three rules for the timing calculations**
+
+1. Create the sequences with **`Sequence(sys)`**: the timing definitions of the scanner (rasters, dead times, ring-down) are stored in the sequence and written in the `.seq` file.
+2. Compute the durations with **`dur(event, sys)`**, and the duration of a block with `block_duration(events...)`.
+3. Check the sequence with **`check_timing(seq, sys)`**. With only `check_timing(seq)`, the definitions stored in the sequence are used: for a `Sequence()` created without `sys`, these are the ones of a default scanner, and the errors are **not** detected.
+
+Example: the delay needed to start the readout block at a time ``T`` after the center of the RF pulse, with a prephaser block in between:
+
+```julia
+D_exc = block_duration(rf, gz)                     # excitation block
+D_pre = block_duration(gx_pre, gy_pre, gz_reph)    # prephaser block
+t_rf  = rf.delay + rf.center                       # RF center in the excitation block
+d = round_to_raster(T - (D_exc - t_rf) - D_pre, sys.limits.DUR_Δt)
+@assert d >= 0 "T is too short"
+```
+
+*Note: in section 6.3, the durations are read in `seq.DUR` of a temporary sequence. KomaMRI computes `seq.DUR` with `dur(event)`, without `sys`: it works there only because, in each block, a gradient lasts longer than the RF pulse + ring-down or the ADC + dead time. `block_duration` is always correct.*
+"""
+
+# ╔═╡ 84c57de8-cfaa-11f1-b5d2-aae81d03624e
+md"""
+## 5.7 Labels: which line is this readout?
+
+The scanner does not know the k-space position of the samples: the raw data only contain the **samples of each ADC**, in the order of acquisition. To reconstruct the image, the reconstruction must know **which line** each readout corresponds to. In Pulseq, this information is given by **labels**, extensions attached to the blocks and created with `make_label`:
+
+| label | meaning |
+|:--|:--|
+| `LIN` | phase-encoding line |
+| `PAR` | partition (second phase encoding in 3D) |
+| `SLC` | slice |
+| `ECO` | echo / contrast |
+| `PHS` | cardiac phase |
+| `REP` | repetition |
+| `AVG`, `SET`, `SEG`... | average, set, segment... |
+
+Each label is a **counter**. There are two ways to change it:
+
+| | syntax | effect | the value at an ADC depends on |
+|:--|:--|:--|:--|
+| `:SET` | `make_label(:SET, :LIN, j)` | the counter **takes** the value `j` | only the block where it is set (**absolute** value) |
+| `:INC` | `make_label(:INC, :LIN, 1)` | the counter is **increased** by 1 (or any integer, even negative) | **all** the previous blocks (**relative** value, starting from 0 or from the last `:SET`) |
+
+A counter keeps its value until it is changed: a label applies to the ADC of its own block and to all the following ADCs. The interpreter writes the value of the counters **at the time of each ADC** in the header of the acquired line (MRD format: `profile.head.idx`), and the reconstruction uses them to sort the data.
+
+The label is simply added to a block, next to the other events, for example in the readout block of line ``j`` (the counters start at 0):
+
+```julia
+@addblock seq += (x=gx, adc, make_label(:SET, :LIN, j - 1))
+```
+
+Labels do not change the gradients or the RF: the sequence played is the same. With them, the lines can be acquired in **any order** (centric, interleaved...) and one acquisition can contain several images (repetitions, echoes, slices...). They are used in section 6.4 and for the reconstruction in notebook 4-3.
+"""
+
+# ╔═╡ 84c57e92-cfaa-11f1-b5d2-aae81d03624e
+make_label(:SET, :LIN, 3)
+
+# ╔═╡ 9b7b0b6a-cfab-11f1-be9f-aae81d03624e
+md"""
+The cell below plays 4 readouts (ADC blocks only) in three ways and reads the `LIN` counter at each ADC with `get_labels(seq)` (value of all the counters after each block):
+
+* **(a) `:SET`**: each readout block sets its line, here in an arbitrary order;
+* **(b) `:INC`**: `LIN` is set to 0 once, then incremented after each readout;
+* **(c) `:INC` with a dummy scan**: same as (b), but the first TR has no ADC (dummy scan) and still contains the increment.
+"""
+
+# ╔═╡ 9b7b0bce-cfab-11f1-be9f-aae81d03624e
+let
+	adc_demo = make_adc(8; dwell=10e-6, delay=sys.limits.ADC_dead_time, sys)
+	wait = make_delay(dur(adc_demo, sys))           # same duration, without ADC
+
+	# (a) :SET : the value is given explicitly in each readout block
+	seq_set = Sequence(sys)
+	for j in [2, 0, 3, 1]                           # any order
+		@addblock seq_set += (adc_demo, make_label(:SET, :LIN, j))
+	end
+
+	# (b) :INC : set once, then +1 after each readout
+	seq_inc = Sequence(sys)
+	@addblock seq_inc += (make_delay(10e-6), make_label(:SET, :LIN, 0))
+	for n in 1:4
+		@addblock seq_inc += (adc_demo,)
+		@addblock seq_inc += (make_delay(10e-6), make_label(:INC, :LIN, 1))
+	end
+
+	# (c) :INC with one dummy scan (first TR without ADC)
+	seq_dummy = Sequence(sys)
+	@addblock seq_dummy += (make_delay(10e-6), make_label(:SET, :LIN, 0))
+	for n in 1:5
+		if n == 1
+			@addblock seq_dummy += wait                   # dummy scan : no ADC...
+		else
+			@addblock seq_dummy += (adc_demo,)
+		end
+		@addblock seq_dummy += (make_delay(10e-6), make_label(:INC, :LIN, 1))   # ... but the increment is played
+	end
+
+	# value of LIN at each ADC
+	lin_at_adc(seq) = [l.LIN for (b, l) in enumerate(get_labels(seq)) if is_ADC_on(seq[b])]
+	a, b, c = lin_at_adc(seq_set), lin_at_adc(seq_inc), lin_at_adc(seq_dummy)
+
+	rows = join(["| $(n) | $(a[n]) | $(b[n]) | $(c[n]) |" for n in 1:4], "\n")
+	Markdown.parse("""
+	| ADC number | (a) `:SET` | (b) `:INC` | (c) `:INC` + dummy scan |
+	|:--|--:|--:|--:|
+	$(rows)
+	""")
+end
+
+# ╔═╡ 9b7b0c00-cfab-11f1-be9f-aae81d03624e
+md"""
+* With **`:SET`**, the value at an ADC is known by reading **one** block: the lines can be acquired in any order (centric, interleaved, random), and adding or removing blocks (dummy scans, navigators, preparation) does not change the labels. This is the robust choice when the value is known in the loop, e.g. `LIN = j - 1` for the line `j`.
+* With **`:INC`**, the value is the **sum** of all the previous increments: it is convenient for a counter that simply follows the loop (an echo after an echo: `ECO` + 1 after each echo of a multi-echo sequence, `REP` + 1 at the end of each repetition), but every increment counts, even in a block without ADC. In (c), the dummy scan shifts all the lines by one: the first acquired line gets `LIN = 1`, and the last one `LIN = 4`, outside the 4 lines of the k-space. An `:INC` counter must also be **reset** with `:SET` when the loop restarts (e.g. `ECO` set to 0 at each excitation).
+
+Both can be mixed: `make_label(:SET, :ECO, 0)` in the excitation block and `make_label(:INC, :ECO, 1)` after each echo.
+"""
+
 # ╔═╡ b2a7cb34-c95c-11f1-99b2-25ec21bd0719
 md"""
 # Part II — A gradient echo sequence
@@ -573,7 +741,7 @@ We now write a 2D **gradient echo** sequence. Each TR contains 4 blocks:
 4. readout: $G_x$ + ADC,
 5. a delay to reach the desired TR.
 
-No spoiling is applied for now (no RF spoiling, no gradient spoiler): we will see the consequences with the simulation.
+No spoiling is applied for now (no RF spoiling, no gradient spoiler): we will see the consequences with the simulation (notebook 4-3).
 
 ## 6.1 Parameters
 """
@@ -695,18 +863,19 @@ md"""
 # ╔═╡ b2a7cbd4-c95c-11f1-bdad-81e11426b550
 md"""
 ## 6.4 Building the sequence
+
+Each readout carries the `LIN` label of its line (section 5.7): `j - 1` for the line `j` (the counters start at 0).
 """
 
 # ╔═╡ b2a7cbde-c95c-11f1-8229-775a3bdbee6e
 begin
 	seq = Sequence(sys)
-	
-	@addblock for scale in (pe_scales)		
+
+	@addblock for (j, scale) in enumerate(pe_scales)
 		seq += (rf, z=gz)                                  # 1. excitation
 		seq += (x=gx_pre, y=scale * gy_pre, z=gz_reph)     # 2. prephasers
-		seq += make_delay(delay_TE)   					   # 3. TE delay
-		seq += (x=gx, adc) 
-		# 4. readout
+		seq += make_delay(delay_TE)                        # 3. TE delay
+		seq += (x=gx, adc, make_label(:SET, :LIN, j - 1))  # 4. readout + label of the line
 		seq += make_delay(delay_TR)                        # 5. TR delay
 	end
 	seq
@@ -813,566 +982,27 @@ let
 	Markdown.MD(Markdown.Code("", join(lines[1:i+8], "\n")))
 end
 
-# ╔═╡ 5de42076-c974-11f1-96f8-aae81d03624e
+# ╔═╡ 84c57fc8-cfaa-11f1-b5d2-aae81d03624e
 md"""
-# Part III — Simulation with KomaMRI
+## 6.8 KomaMRI display functions
 
-# 7. Simulating the gradient echo
+KomaMRI provides interactive displays (PlotlyJS: zoom, hover...) to check a sequence before running it:
 
-KomaMRI solves the **Bloch equations** for every spin of a digital phantom, with the **same `Sequence` object** as the one written in the `.seq` file: what we simulate is exactly what the scanner would play (gradients, RF, ADC timing, dead times...).
-
-## 7.1 The phantom
-
-A phantom is a set of spins (isochromats), each with a position ``(x, y, z)``, a proton density ``\rho``, relaxation times ``T_1``, ``T_2``, ``T_2^*`` and an off-resonance ``\Delta\omega`` (e.g. the chemical shift of fat). We first use the 2D brain phantom of KomaMRI with its **standard parameters** (`brain_phantom2D()`: one isochromat every 2 mm) and the default simulation parameters, with the long TR of section 6.1. We will see in section 8 when this density of isochromats is not sufficient.
-"""
-
-# ╔═╡ 5de420d0-c974-11f1-96f8-aae81d03624e
-obj = brain_phantom2D()     # standard phantom : one isochromat every 2 mm
-
-# ╔═╡ 5de42102-c974-11f1-96f8-aae81d03624e
-let
-	f = Figure(size=(1200, 420))
-	for (j, (name, val, unit)) in enumerate([("ρ", obj.ρ, ""), ("T₁", obj.T1 .* 1e3, " (ms)"), ("T₂", obj.T2 .* 1e3, " (ms)")])
-		ax = Axis(f[1, 2j-1], title=name * unit, aspect=DataAspect(), xlabel="x (mm)", ylabel="y (mm)")
-		sc = scatter!(ax, obj.x .* 1e3, obj.y .* 1e3, color=val, markersize=2, colormap=:viridis)
-		Colorbar(f[1, 2j], sc)
-		# field of view of the sequence
-		poly!(ax, Rect(-FOV[1] / 2 * 1e3, -FOV[2] / 2 * 1e3, FOV[1] * 1e3, FOV[2] * 1e3), color=:transparent, strokecolor=:red, strokewidth=2)
-	end
-	Label(f[0, :], "$(length(obj)) spins — red : FOV of the sequence ($(FOV[1] * 1e3) × $(FOV[2] * 1e3) mm)", fontsize=16)
-	f
-end
-
-# ╔═╡ 5de42134-c974-11f1-96f8-aae81d03624e
-md"""
-## 7.2 Simulation
-
-`simulate(obj, seq, sys)` returns the signal acquired by the ADC. With `return_type = "mat"`, the result is an array (samples × coils) in the order of acquisition: the $N_x$ samples of the first line, then the second line...
-"""
-
-# ╔═╡ 5de42148-c974-11f1-96f8-aae81d03624e
-begin
-	sim_params = KomaMRICore.default_sim_params()
-	sim_params["return_type"] = "mat"
-	signal = simulate(obj, seq, sys; sim_params)
-end;
-
-# ╔═╡ 5de4215c-c974-11f1-96f8-aae81d03624e
-md"""
-We can also simulate the **file** we wrote: `read_seq` reads the `.seq` file back into a `Sequence`. Both signals must be identical (up to the numerical precision of the file):
-"""
-
-# ╔═╡ 5de42170-c974-11f1-96f8-aae81d03624e
-begin
-	seq_from_file = read_seq(seq_file)
-	signal_file = simulate(obj, seq_from_file, sys; sim_params)
-	md"Relative difference between the simulation of `seq` and of the `.seq` file : $(round(maximum(abs, signal_file .- signal) / maximum(abs, signal), sigdigits=2))"
-end
-
-# ╔═╡ 5de42184-c974-11f1-96f8-aae81d03624e
-md"""
-## 7.3 Reconstruction
-
-The acquisition is Cartesian: the signal is reshaped into an $N_x \times N_y$ k-space and reconstructed with a centered inverse FFT (basic reconstruction practical). The sample $N_x/2+1$ of the line $N_y/2+1$ is $k = 0$, as designed in sections 5.2 and 5.3.
-"""
-
-# ╔═╡ 5de42198-c974-11f1-96f8-aae81d03624e
-begin
-	"Centered 2D inverse FFT : k-space → image"
-	ifft2c(k) = fftshift(ifft(ifftshift(k)))
-
-	kspace_sim = reshape(signal[:, 1], Nx, Ny)    # column j = line j (phase-encoding step)
-	img_sim = ifft2c(kspace_sim)
-end;
-
-# ╔═╡ 5de421ac-c974-11f1-96f8-aae81d03624e
-let
-	# pixel centers in mm (0 at index N/2 + 1)
-	xs = ((1:Nx) .- (Nx ÷ 2 + 1)) .* (FOV[1] / Nx) .* 1e3
-	ys = ((1:Ny) .- (Ny ÷ 2 + 1)) .* (FOV[2] / Ny) .* 1e3
-
-	f = Figure(size=(1200, 450))
-	ax = Axis(f[1, 1], title="k-space (log |signal|)", xlabel="kₓ / Δkₓ", ylabel="k_y / Δk_y", aspect=DataAspect())
-	heatmap!(ax, (1:Nx) .- (Nx ÷ 2 + 1), (1:Ny) .- (Ny ÷ 2 + 1), log10.(abs.(kspace_sim) .+ 1e-3), colormap=:inferno)
-	ax = Axis(f[1, 2], title="image $(Nx) × $(Ny) — pixel $(round(FOV[1] / Nx * 1e3, digits=1)) × $(round(FOV[2] / Ny * 1e3, digits=1)) mm", xlabel="x (mm)", ylabel="y (mm)", aspect=DataAspect())
-	heatmap!(ax, xs, ys, abs.(img_sim), colormap=:grays)
-	ax = Axis(f[1, 3], title="phantom (ρ) in the same FOV", xlabel="x (mm)", ylabel="y (mm)", aspect=DataAspect())
-	scatter!(ax, obj.x .* 1e3, obj.y .* 1e3, color=obj.ρ, markersize=2, colormap=:grays)
-	limits!(ax, -FOV[1] / 2 * 1e3, FOV[1] / 2 * 1e3, -FOV[2] / 2 * 1e3, FOV[2] / 2 * 1e3)
-	f
-end
-
-# ╔═╡ 092d29d0-cd5f-11f1-86a2-aae81d03624e
-let
-	TRms = TR * 1e3
-	tscan = round(Ny * TR, digits=1)
-	tscan256 = round(256 * TR / 60, digits=1)
-	md"""
-	With TR = $(TRms) ms, the image is correct: TR is much longer than the ``T_2`` of the tissues (``T_2`` ≤ 330 ms in this phantom), so the transverse magnetization has **decayed before the next excitation**. Each TR starts again from a purely longitudinal magnetization: the relaxation acts as a **natural ``T_2`` spoiling**.
-	
-	But the acquisition lasts ``N_y \times TR`` = $(tscan) s for a 32 × 32 image, i.e. $(tscan256) min for 256 lines! To go faster, we must shorten TR... and then the transverse magnetization does not have time to disappear.
-	"""
-end
-
-# ╔═╡ 092d2a34-cd5f-11f1-86a2-aae81d03624e
-md"""
-# 8. Short TR: spoiling
-
-## 8.1 A short TR without spoiling
-
-To build the different versions of the sequence, we write a function that reuses the events of section 6 and adds the options studied below (gradient spoiler, RF spoiling, dummy scans, labels). The TE is unchanged; the TR delay is recomputed for the new TR.
-"""
-
-# ╔═╡ 092d2a5c-cd5f-11f1-86a2-aae81d03624e
-begin
-	# gradient spoiler along z : n_spoil cycles of dephasing across the slice thickness
-	n_spoil = 2
-	gz_spoil = make_trapezoid(; area=n_spoil / slice_thickness, sys)
-
-	"""
-	    gre_sequence(; TR, flip=flip_angle, spoiler=false, rf_spoiling=false, φ0=117, n_dummy=0, labels=false, rep=nothing, order=1:Ny)
-
-	Gradient echo with the events of section 6.
-	- `spoiler` : gradient spoiler `gz_spoil` at the end of each TR
-	- `rf_spoiling` : quadratic RF phase increment φₙ = φ0 n(n+1)/2 (degrees), applied to the RF and to the ADC
-	- `n_dummy` : number of dummy scans (TRs without ADC) before the acquisition
-	- `flip` : flip angle (degrees) : the RF pulse of section 6 is scaled
-	- `labels` : Pulseq label LIN (line number) on each readout
-	- `rep` : if given, the label REP (repetition) is also set to `rep`
-	- `order` : order of acquisition of the phase-encoding lines
-	"""
-	function gre_sequence(; TR=TR, flip=flip_angle, spoiler=false, rf_spoiling=false, φ0=117, n_dummy=0, labels=false, rep=nothing, order=1:Ny)
-		d_TR = round_to_raster(TR - (D1 + D2 + delay_TE + D4), sys.limits.DUR_Δt)
-		@assert d_TR >= 0 "TR too short"
-		@assert !spoiler || d_TR >= dur(gz_spoil) "TR too short for the spoiler"
-
-		seq = Sequence(sys)
-		lines = vcat(fill(0, n_dummy), collect(order))        # 0 = dummy scan
-		for (n, j) in enumerate(lines)
-			# RF spoiling : same phase for the RF pulse and the ADC
-			φ = rf_spoiling ? deg2rad(φ0 * (n - 1) * n / 2) : 0.0
-			rf_n = deepcopy(rf);  rf_n.ϕ = φ;  rf_n.A .*= flip / flip_angle
-			adc_n = deepcopy(adc); adc_n.ϕ = φ
-			scale = j == 0 ? 0.0 : pe_scales[j]
-
-			@addblock seq += (rf_n, z=gz)
-			@addblock seq += (x=gx_pre, y=scale * gy_pre, z=gz_reph)
-			@addblock seq += make_delay(delay_TE)
-			if j == 0
-				@addblock seq += (make_delay(D4), x=gx)              # dummy scan : no ADC
-			elseif labels && rep !== nothing
-				@addblock seq += (x=gx, adc_n, make_label(:SET, :LIN, j - 1), make_label(:SET, :REP, rep))
-			elseif labels
-				@addblock seq += (x=gx, adc_n, make_label(:SET, :LIN, j - 1))
-			else
-				@addblock seq += (x=gx, adc_n)
-			end
-			if spoiler
-				@addblock seq += (make_delay(d_TR), z=gz_spoil)
-			else
-				@addblock seq += make_delay(d_TR)
-			end
-		end
-		return seq
-	end
-
-	"Image of a gradient echo simulation (signal returned with return_type = \"mat\")"
-	gre_image(signal) = ifft2c(reshape(signal[:, 1], Nx, Ny))
-
-	TR_short = 20e-3
-end;
-
-# ╔═╡ 092d2a70-cd5f-11f1-86a2-aae81d03624e
-begin
-	seq_short = gre_sequence(; TR=TR_short)
-	img_short_std = gre_image(simulate(obj, seq_short, sys; sim_params))
-end;
-
-# ╔═╡ 092d2a7a-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(900, 420))
-	for (j, (im, t)) in enumerate([(img_sim, "TR = $(TR * 1e3) ms"), (img_short_std, "TR = $(TR_short * 1e3) ms, no spoiler")])
-		ax = Axis(f[1, j], title=t, aspect=DataAspect())
-		heatmap!(ax, abs.(im), colormap=:grays)
-		hidedecorations!(ax)
-	end
-	Label(f[0, :], "standard phantom : $(length(obj)) spins", fontsize=16)
-	f
-end
-
-# ╔═╡ 092d2a8e-cd5f-11f1-86a2-aae81d03624e
-md"""
-With a short TR, the image is corrupted. Part of this artefact is **physical**: the transverse magnetization left at the end of a TR is tilted by the next pulses and creates additional echoes (stimulated echoes) which add to the signal of the following lines.
-
-But part of it is **numerical**. Our sequence is in fact **not balanced**: at each TR, the gradients leave a net area (moment) which dephases the spins inside each voxel:
-"""
-
-# ╔═╡ 092d2a98-cd5f-11f1-86a2-aae81d03624e
-let
-	m_x = (area(gx_pre) + area(gx)) * γ̄              # net readout area per TR (1/m)
-	m_z = (area(gz) + area(gz_reph)) * γ̄             # net slice-selection area per TR (1/m)
-	cyclesz = round(m_z * slice_thickness, digits=1)
-	thicknessmm = slice_thickness * 1e3
-	md"""
-	| axis | net area per TR | dephasing across one voxel |
-	|:--|--:|--:|
-	| ``x`` (readout) | $(round(m_x, digits=1)) m⁻¹ | $(round(m_x * FOV[1] / Nx, digits=1)) cycles over a pixel of $(FOV[1] / Nx * 1e3) mm |
-	| ``z`` (slice) | $(round(m_z, digits=1)) m⁻¹ | $(cyclesz) cycles over the slice thickness of $(thicknessmm) mm |
-	"""
-end
-
-# ╔═╡ 092d2aa2-cd5f-11f1-86a2-aae81d03624e
-md"""
-In a real voxel, there is a **continuum** of spins: this dephasing partially destroys the transverse magnetization (it is a "natural" gradient spoiling). In the simulation, each voxel contains only a few isochromats: the standard phantom has a spin every 2 mm, i.e. 4 isochromats along each direction of an 8 mm pixel, and above all a **single** isochromat along ``z`` (2D phantom) for 2 cycles of dephasing across the slice. The dephasing is not sampled correctly and the simulation creates **artificial echoes**.
-
-## 8.2 Increasing the density of isochromats
-
-To simulate the dephasing inside the slice correctly, we create a phantom with several isochromats **along $z$**, distributed over the slice thickness (copies of the 2D phantom at different $z$, with $\rho$ divided by the number of copies):
-"""
-
-# ╔═╡ 092d2aac-cd5f-11f1-86a2-aae81d03624e
-"""
-    phantom_z(obj, Nz)
-
-Copies of the 2D phantom `obj` at `Nz` positions along z, distributed over the slice thickness.
-"""
-function phantom_z(obj, Nz)
-	zs = (((1:Nz) .- 0.5) ./ Nz .- 0.5) .* slice_thickness
-	N = length(obj)
-	return Phantom(name="brain, $(Nz) isochromats along z",
-		x=repeat(obj.x, Nz), y=repeat(obj.y, Nz), z=repeat(zs, inner=N),
-		ρ=repeat(obj.ρ, Nz) ./ Nz, T1=repeat(obj.T1, Nz), T2=repeat(obj.T2, Nz),
-		T2s=repeat(obj.T2s, Nz), Δw=repeat(obj.Δw, Nz))
-end
-
-# ╔═╡ 092d2ac0-cd5f-11f1-86a2-aae81d03624e
-begin
-	Nz_iso = 20
-	obj_z = phantom_z(obj, Nz_iso)
-	img_short_z = gre_image(simulate(obj_z, seq_short, sys; sim_params))
-end;
-
-# ╔═╡ 092d2aca-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(900, 420))
-	for (j, (im, t)) in enumerate([(img_short_std, "$(length(obj)) spins (standard)"), (img_short_z, "$(length(obj_z)) spins ($(Nz_iso) along z)")])
-		ax = Axis(f[1, j], title=t, aspect=DataAspect())
-		heatmap!(ax, abs.(im), colormap=:grays)
-		hidedecorations!(ax)
-	end
-	Label(f[0, :], "same sequence : TR = $(TR_short * 1e3) ms, no spoiler", fontsize=16)
-	f
-end
-
-# ╔═╡ 092d2ae8-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 8.3 Gradient spoiling and RF spoiling: a single-voxel experiment
-
-The goal of a **spoiled** gradient echo (FLASH, SPGR) is to reach the steady state where **no transverse magnetization survives** from one TR to the next. The signal is then given by the **Ernst equation**:
-
-$$S = M_0 \sin\alpha\,\frac{1 - E_1}{1 - E_1\cos\alpha}\,e^{-TE/T_2^*}, \qquad E_1 = e^{-TR/T_1}$$
-
-Two tools are used:
-
-* **gradient spoiling**: a strong gradient at the end of each TR dephases the spins over ``n`` cycles inside each voxel: area ``= n/\Delta z`` for a spoiler along ``z`` (here $(n_spoil) cycles, $(round(area(gz_spoil) * γ̄, digits=0)) m⁻¹). Alone, it is **not sufficient**: the dephasing is the same at every TR, and part of the magnetization is refocused by the following pulses (stimulated echoes).
-* **RF spoiling**: the phase of the RF pulse changes at every TR with a **quadratic** increment, ``\varphi_n = \varphi_0\,n(n+1)/2`` with ``\varphi_0 = 117°`` (Zur et al., MRM 1991). The echoes of the previous excitations no longer add coherently. The ADC must be demodulated with the **same phase** (`adc.ϕ = φₙ`), otherwise the phase of the signal changes at each line.
-
-To see the effect clearly, we simulate a **single voxel** (gray matter, ``T_1`` = 833 ms, ``T_2`` = 83 ms) described by ``N_{iso}`` isochromats along ``z``, with a non-selective pulse, and we follow the signal over 150 TRs.
-"""
-
-# ╔═╡ 092d2af2-cd5f-11f1-86a2-aae81d03624e
-md"""
-Isochromats in the voxel ``N_{iso}`` : $(@bind N_iso Slider([1, 4, 8, 16, 32, 64, 128, 256], default=64, show_value=true))
-
-RF phase increment ``\varphi_0`` (°) : $(@bind φ0_demo Slider(0:1:180, default=117, show_value=true))
-"""
-
-# ╔═╡ 092d2b06-cd5f-11f1-86a2-aae81d03624e
-voxel_signals = let
-	T1v, T2v, n_TR = 0.833, 0.083, 150
-	vox = Phantom(name="voxel", x=zeros(N_iso), y=zeros(N_iso),
-		z=(((1:N_iso) .- 0.5) ./ N_iso .- 0.5) .* slice_thickness,
-		ρ=fill(1 / N_iso, N_iso), T1=fill(T1v, N_iso), T2=fill(T2v, N_iso))
-
-	rf_b = make_block_pulse(flip_angle * π / 180; duration=0.5e-3, sys)     # non-selective pulse
-	adc_1 = make_adc(1; dwell=10e-6, delay=sys.limits.ADC_dead_time, sys)
-	d_te = round_to_raster(TE - dur(rf_b, sys), sys.limits.DUR_Δt)
-	d_tr = round_to_raster(TR_short - dur(rf_b, sys) - d_te - 100e-6, sys.limits.DUR_Δt)
-
-	function voxel_seq(; spoiler, rf_spoiling)
-		s = Sequence(sys)
-		for n in 1:n_TR
-			φ = rf_spoiling ? deg2rad(φ0_demo * (n - 1) * n / 2) : 0.0
-			r = deepcopy(rf_b);  r.ϕ = φ
-			a = deepcopy(adc_1); a.ϕ = φ
-			@addblock s += (r,)
-			@addblock s += make_delay(d_te)
-			@addblock s += (a, make_delay(100e-6))
-			if spoiler
-				@addblock s += (make_delay(d_tr), z=gz_spoil)
-			else
-				@addblock s += make_delay(d_tr)
-			end
-		end
-		return s
-	end
-
-	cases = [("no spoiling (no gradient)", false, false), ("gradient spoiler", true, false), ("gradient + RF spoiling", true, true)]
-	signals = [abs.(vec(simulate(vox, voxel_seq(; spoiler=sp, rf_spoiling=rs), sys; sim_params)[:, 1])) for (_, sp, rs) in cases]
-
-	E1 = exp(-TR_short / T1v)
-	α = flip_angle * π / 180
-	ernst = sin(α) * (1 - E1) / (1 - E1 * cos(α)) * exp(-TE / T2v)
-	(names=first.(cases), signals=signals, ernst=ernst)
-end;
-
-# ╔═╡ 092d2b10-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(1000, 420))
-	ax = Axis(f[1, 1], title="single voxel, TR = $(TR_short * 1e3) ms, α = $(flip_angle)°, $(N_iso) isochromats, φ₀ = $(φ0_demo)°", xlabel="TR number", ylabel="|signal| (M₀ = 1)")
-	for (name, s) in zip(voxel_signals.names, voxel_signals.signals)
-		lines!(ax, 1:length(s), s, label=name * " — last : $(round(s[end], digits=4))", linewidth=2)
-	end
-	hlines!(ax, [voxel_signals.ernst], color=:black, linestyle=:dash, label="Ernst equation : $(round(voxel_signals.ernst, digits=4))")
-	axislegend(ax, position=:rt)
-	f
-end
-
-# ╔═╡ 092d2b2e-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 8.4 Spoiled gradient echo images
-
-We now add the gradient spoiler, then the RF spoiling, to the imaging sequence, and simulate them with the dense phantom (TR = $(TR_short * 1e3) ms):
-"""
-
-# ╔═╡ 092d2b38-cd5f-11f1-86a2-aae81d03624e
-begin
-	img_spoil_grad = gre_image(simulate(obj_z, gre_sequence(; TR=TR_short, spoiler=true), sys; sim_params))
-	img_spoil_full = gre_image(simulate(obj_z, gre_sequence(; TR=TR_short, spoiler=true, rf_spoiling=true), sys; sim_params))
-end;
-
-# ╔═╡ 092d2b42-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(1300, 400))
-	ims = [(img_sim, "TR = $(TR * 1e3) ms (natural T₂ spoiling)"), (img_short_z, "TR = $(TR_short * 1e3) ms, no spoiler"),
-		(img_spoil_grad, "TR = $(TR_short * 1e3) ms, gradient spoiler"), (img_spoil_full, "TR = $(TR_short * 1e3) ms, gradient + RF spoiling")]
-	for (j, (im, t)) in enumerate(ims)
-		ax = Axis(f[1, j], title=t, aspect=DataAspect(), titlesize=13)
-		heatmap!(ax, abs.(im), colormap=:grays)
-		hidedecorations!(ax)
-	end
-	f
-end
-
-# ╔═╡ 092d2b6a-cd5f-11f1-86a2-aae81d03624e
-md"""
-# 9. Dummy scans
-
-## 9.1 The approach to the steady state
-
-The Ernst equation describes the **steady state**. At the beginning of the acquisition, the magnetization starts from equilibrium ($M_z = M_0$): the first TRs give a much higher signal, and the signal converges towards the steady state with an apparent relaxation time
-
-$$\frac{1}{T_1^*} = \frac{1}{T_1} - \frac{\ln(\cos\alpha)}{TR}$$
-
-Let's look at the spoiled signal of each tissue over the TRs (single-voxel simulations, gradient + RF spoiling). We use 400 isochromats: with a long ``T_2`` (CSF), the transverse magnetization of many previous TRs survives, dephased by several times ``n_{spoil}`` cycles, and many isochromats are needed to sample these phases (with 64 isochromats the CSF curve oscillates artificially).
-"""
-
-# ╔═╡ 092d2b74-cd5f-11f1-86a2-aae81d03624e
-transients = let
-	n_TR = 250
-	tissues = [("WM", 0.500, 0.070), ("GM", 0.833, 0.083), ("CSF", 2.569, 0.329)]
-	N = 400        # many isochromats : with a long T₂ (CSF), the echoes of many previous TRs survive
-	rf_b = make_block_pulse(flip_angle * π / 180; duration=0.5e-3, sys)
-	adc_1 = make_adc(1; dwell=10e-6, delay=sys.limits.ADC_dead_time, sys)
-	d_te = round_to_raster(TE - dur(rf_b, sys), sys.limits.DUR_Δt)
-	d_tr = round_to_raster(TR_short - dur(rf_b, sys) - d_te - 100e-6, sys.limits.DUR_Δt)
-	s = Sequence(sys)
-	for n in 1:n_TR
-		φ = deg2rad(117 * (n - 1) * n / 2)
-		r = deepcopy(rf_b);  r.ϕ = φ
-		a = deepcopy(adc_1); a.ϕ = φ
-		@addblock s += (r,)
-		@addblock s += make_delay(d_te)
-		@addblock s += (a, make_delay(100e-6))
-		@addblock s += (make_delay(d_tr), z=gz_spoil)
-	end
-	map(tissues) do (name, T1v, T2v)
-		vox = Phantom(name=name, x=zeros(N), y=zeros(N), z=(((1:N) .- 0.5) ./ N .- 0.5) .* slice_thickness,
-			ρ=fill(1 / N, N), T1=fill(T1v, N), T2=fill(T2v, N))
-		sig = abs.(vec(simulate(vox, s, sys; sim_params)[:, 1]))
-		T1s = 1 / (1 / T1v - log(cos(flip_angle * π / 180)) / TR_short)
-		(name=name, signal=sig, T1_star=T1s)
-	end
-end;
-
-# ╔═╡ 092d2b7e-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(1000, 420))
-	ax = Axis(f[1, 1], title="gradient + RF spoiled signal, TR = $(TR_short * 1e3) ms, α = $(flip_angle)°", xlabel="TR number", ylabel="|signal| (M₀ = 1)", yscale=log10)
-	for t in transients
-		lines!(ax, 1:length(t.signal), t.signal, linewidth=2, label="$(t.name) : T₁* = $(round(t.T1_star * 1e3)) ms ≈ $(round(t.T1_star / TR_short, digits=1)) TR")
-	end
-	vspan!(ax, [0.5], [Ny + 0.5], color=(:orange, 0.2), label="the $(Ny) lines of the image (no dummy scan)")
-	axislegend(ax, position=:rt)
-	f
-end
-
-# ╔═╡ 092d2b88-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 9.2 Dummy scans
-
-**Dummy scans** are TRs played **without acquisition** (no ADC) before the first line: the magnetization approaches the steady state before the k-space is acquired. In `gre_sequence`, they are TRs with a zero phase encoding and a delay instead of the ADC (`n_dummy`).
-"""
-
-# ╔═╡ 092d2b92-cd5f-11f1-86a2-aae81d03624e
-md"""
-Number of dummy scans : $(@bind n_dummy_demo Select([0, 10, 50, 150], default=50))
-"""
-
-# ╔═╡ 092d2ba6-cd5f-11f1-86a2-aae81d03624e
-img_dummy = gre_image(simulate(obj_z, gre_sequence(; TR=TR_short, spoiler=true, rf_spoiling=true, n_dummy=n_dummy_demo), sys; sim_params));
-
-# ╔═╡ 092d2bb0-cd5f-11f1-86a2-aae81d03624e
-let
-	f = Figure(size=(1200, 420))
-	ax = Axis(f[1, 1], title="no dummy scan", aspect=DataAspect())
-	heatmap!(ax, abs.(img_spoil_full), colormap=:grays); hidedecorations!(ax)
-	ax = Axis(f[1, 2], title="$(n_dummy_demo) dummy scans", aspect=DataAspect())
-	heatmap!(ax, abs.(img_dummy), colormap=:grays); hidedecorations!(ax)
-	ax = Axis(f[1, 3], title="|difference|", aspect=DataAspect())
-	heatmap!(ax, abs.(abs.(img_dummy) .- abs.(img_spoil_full)), colormap=:inferno); hidedecorations!(ax)
-	f
-end
-
-# ╔═╡ 401e7702-7ff8-47b0-b310-761e3e59acf9
-md"""
-# 10. KomaMRI built-in functions
-
-KomaMRI has a lot of built-in functions for visualization and reconstruction. Let's see them  rapidly.
-
-The return_type can be "mat" or "raw" :
-- mat stores only the signal
-- raw creates a MRD format that can be used by MRIReco for the reconstruction
-"""
-
-# ╔═╡ 6afc141b-bafd-40e1-a865-958c8c8944f2
-# a copy of the simulation parameters with return_type = "raw" (do not modify `sim_params` : it is used by other cells)
-signal_raw = simulate(obj, seq, sys; sim_params=merge(sim_params, Dict("return_type" => "raw")))
-
-# ╔═╡ f601219a-8b52-46f0-997b-ad9f83c479f5
-plot_seq(seq; range=[0, to_SI(TR) * 1e3], slider=true, height=320)
-
-# ╔═╡ d443eb8c-7062-4bf1-9578-52a590cb31de
- plot_kspace(seq; view_2d=true, width=400, height=400)
-
-# ╔═╡ f4253c9c-9f5a-4802-b5e4-0607936616d1
-plot_signal(signal_raw)
-
-# ╔═╡ 092d31a0-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 10.1 Automatic reconstruction
-
-With `return_type = "raw"`, the simulation returns an ISMRMRD `RawAcquisitionData`. It can be converted to `AcquisitionData` and reconstructed by **MRIReco.jl** (`reconstruction`). For the data simulated by KomaMRI, the trajectory (the k-space position of each sample) is computed from the sequence: MRIReco uses it to place the samples.
-"""
-
-# ╔═╡ 718d4132-1f4e-4458-86e7-19569f00020a
-let
-	acq = AcquisitionData(signal_raw)
-	rec_params = Dict{Symbol,Any}(:reco => "direct", :reconSize => (Nx, Ny))
-	img_rec = reconstruction(acq, rec_params)
-	plot_image(abs.(img_rec[:, :, 1]); title="MRIReco reconstruction")
-end
-
-# ╔═╡ 092d3696-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 10.2 Labels
-
-On the scanner, the raw data does not contain the k-space position of each sample: the reconstruction must know **which line** each readout corresponds to. In Pulseq, this information is given by **labels**, extensions attached to the blocks (`make_label`):
-
-| label | meaning |
+| function | displays |
 |:--|:--|
-| `LIN` | phase-encoding line |
-| `PAR` | partition (second phase encoding in 3D) |
-| `SLC` | slice |
-| `AVG`, `REP`, `SET`, `ECO`... | average, repetition, echo... |
+| `plot_seq(seq; range=[t1, t2], slider=true)` | the sequence diagram (RF, gradients, ADC) between ``t_1`` and ``t_2`` (ms) — used in section 6.4 |
+| `plot_kspace(seq)` | the k-space trajectory, with the ADC samples (`view_2d=true` for a 2D view) |
+| `plot_M0(seq)` | the zeroth moment (k-space position) of each gradient over time |
+| `plot_slew_rate(seq)` | the slew rate of the gradients |
 
-`make_label(:SET, :LIN, j)` sets the counter to `j`, `make_label(:INC, :LIN, 1)` increments it. The value of the counters at the time of each ADC is written in the header of the corresponding profile (`profile.head.idx.kspace_encode_step_1` for `LIN`).
-
-To show why they are needed, we acquire the lines in a **centric** order ($k_y = 0$ first, then $\pm\Delta k_y$, ...) with the `LIN` label:
+and for the simulation (notebook 4-3): `plot_phantom_map(obj, :T1)` (phantom), `plot_signal(raw)` (raw data), `plot_image(image)` (reconstructed image).
 """
 
-# ╔═╡ 092d36aa-cd5f-11f1-86a2-aae81d03624e
-begin
-	centric_order = vec(permutedims(hcat(Ny÷2+1:Ny, Ny÷2:-1:1)))   # 17, 16, 18, 15, ...
-	seq_centric = gre_sequence(; TR=TR, labels=true, order=centric_order)
-	raw_centric = simulate(obj, seq_centric, sys; sim_params=merge(sim_params, Dict("return_type" => "raw")))
-end;
+# ╔═╡ 84c57fd2-cfaa-11f1-b5d2-aae81d03624e
+plot_kspace(seq; view_2d=true, width=450, height=450)
 
-# ╔═╡ 092d36be-cd5f-11f1-86a2-aae81d03624e
-md"""
-Order of acquisition of the lines : $(join(centric_order[1:8], ", ")), …
-
-`LIN` label of the first profiles : $(join([Int(p.head.idx.kspace_encode_step_1) for p in raw_centric.profiles[1:8]], ", ")), … (0-based)
-"""
-
-# ╔═╡ 092d36c8-cd5f-11f1-86a2-aae81d03624e
-let
-	# (a) without the labels : the profiles are put in the order of acquisition
-	k_naive = reduce(hcat, [p.data[:, 1] for p in raw_centric.profiles])
-
-	# (b) with the labels : each profile is put at its line
-	k_sorted = zeros(ComplexF64, Nx, Ny)
-	for p in raw_centric.profiles
-		k_sorted[:, p.head.idx.kspace_encode_step_1+1] = p.data[:, 1]
-	end
-
-	# (c) MRIReco : uses the trajectory computed by KomaMRI
-	img_mrireco = reconstruction(AcquisitionData(raw_centric), Dict{Symbol,Any}(:reco => "direct", :reconSize => (Nx, Ny)))
-
-	f = Figure(size=(1200, 420))
-	for (j, (im, t)) in enumerate([(ifft2c(k_naive), "(a) order of acquisition"), (ifft2c(k_sorted), "(b) sorted with the LIN label"), (img_mrireco[:, :, 1], "(c) MRIReco (trajectory)")])
-		ax = Axis(f[1, j], title=t, aspect=DataAspect())
-		heatmap!(ax, abs.(im), colormap=:grays)
-		hidedecorations!(ax)
-	end
-	f
-end
-
-# ╔═╡ 092d36f0-cd5f-11f1-86a2-aae81d03624e
-md"""
-## 10.3 Splitting the data with labels
-
-Labels are also used to **split the data** of a single sequence into several images: repetitions (`REP`), contrasts (`SET`, `ECO`), slices (`SLC`), averages (`AVG`)...
-
-As an example, one sequence acquires the same slice twice with two different flip angles (5° and 30°, gradient + RF spoiled, 30 dummy scans each), the second acquisition being labeled `REP = 1`. The reconstruction reads the `REP` and `LIN` counters of each profile to build two k-spaces:
-"""
-
-# ╔═╡ 092d36fa-cd5f-11f1-86a2-aae81d03624e
-begin
-	flips_rep = [5, 30]
-	seq_2contrasts = gre_sequence(; TR=TR_short, flip=flips_rep[1], spoiler=true, rf_spoiling=true, n_dummy=30, labels=true, rep=0) +
-		gre_sequence(; TR=TR_short, flip=flips_rep[2], spoiler=true, rf_spoiling=true, n_dummy=30, labels=true, rep=1)
-	raw_2contrasts = simulate(obj_z, seq_2contrasts, sys; sim_params=merge(sim_params, Dict("return_type" => "raw")))
-end;
-
-# ╔═╡ 092d3704-cd5f-11f1-86a2-aae81d03624e
-let
-	# one k-space per repetition, each profile at its line
-	n_rep = maximum(p.head.idx.repetition for p in raw_2contrasts.profiles) + 1
-	k_rep = zeros(ComplexF64, Nx, Ny, n_rep)
-	for p in raw_2contrasts.profiles
-		k_rep[:, p.head.idx.kspace_encode_step_1+1, p.head.idx.repetition+1] = p.data[:, 1]
-	end
-
-	f = Figure(size=(900, 420))
-	for r in 1:n_rep
-		ax = Axis(f[1, r], title="REP = $(r - 1) : α = $(flips_rep[r])°", aspect=DataAspect())
-		heatmap!(ax, abs.(ifft2c(k_rep[:, :, r])), colormap=:grays)
-		hidedecorations!(ax)
-	end
-	Label(f[0, :], "$(length(raw_2contrasts.profiles)) profiles split with the REP and LIN labels", fontsize=16)
-	f
-end
+# ╔═╡ 84c57fe6-cfaa-11f1-b5d2-aae81d03624e
+plot_M0(seq; height=350)
 
 # ╔═╡ b2a7cc6a-c95c-11f1-a8e7-e95f1c97f46e
 md"""
@@ -1480,6 +1110,16 @@ answer_folded(md"""
 **Q12** After the RF center, $G_z$ plays half of its flat top and its fall ramp: $A\,(t_f/2 + t_d/2)$. The total area is $A\,(t_f + t_r/2 + t_d/2)$. With $t_r = t_d$, half of it is $A\,(t_f/2 + t_r/2)$: the same value. This is no longer true for an asymmetric pulse (center not in the middle of the flat top) or different ramps: the rephaser must then be computed from the RF center (`center_pos` in `make_sinc_pulse`).
 """)
 
+# ╔═╡ 84c57ec4-cfaa-11f1-b5d2-aae81d03624e
+md"""
+**Q12 bis** Why must the `LIN` label be set in the **readout** block (or before it), and not after the ADC? Do the labels change if dummy scans (TRs without ADC) are added before the acquisition?
+""" |> question
+
+# ╔═╡ 84c57ee2-cfaa-11f1-b5d2-aae81d03624e
+answer_folded(md"""
+**Q12 bis** The value of the counters **at the time of the ADC** is written in the header of the line: a label set after the readout would be associated with the next line. Dummy scans have no ADC: no line is written, and the label of each readout still gives its line (the labels must be **set** with the line number, not only incremented at each TR, to be independent of the dummy scans).
+""")
+
 # ╔═╡ b2a7cbc0-c95c-11f1-85ec-b9982577b5bd
 md"""
 **Q13** Which parameters would you change to decrease the minimum TE? List at least three, with their drawback.
@@ -1511,208 +1151,15 @@ answer_folded(md"""
 md"""
 **Q14** In the `[BLOCKS]` section, each line is a block. Identify the columns (duration, RF, GX, GY, GZ, ADC...). How many different gradient events (`[TRAP]` section) do you expect for ``N_y`` = $(Ny) phase-encoding lines? Check in the file.
 
-**Q15** This sequence has no spoiling: what happens to the transverse magnetization at the end of each TR with a short TR (e.g. TR = 20 ms, ``T_2^*`` of the brain ≈ 50 ms)? And with the TR of section 6.1? What will it do to the image? (We will check it with the simulation.)
+**Q15** This sequence has no spoiling: what happens to the transverse magnetization at the end of each TR with a short TR (e.g. TR = 20 ms, ``T_2^*`` of the brain ≈ 50 ms)? And with the TR of section 6.1? What will it do to the image? (We will check it with the simulation in notebook 4-3.)
 """ |> question
 
 # ╔═╡ b2a7cc62-c95c-11f1-b2f5-7ffa87d0a69a
 answer_folded(md"""
-**Q14** The columns are: block number, block duration (in units of the block raster), RF, GX, GY, GZ, ADC and extension IDs (0 = no event). Pulseq stores each **distinct** event only once (in the `[RF]`, `[TRAP]`, `[ADC]` sections) and the blocks refer to them by their ID (0 = no event). The RF pulse, the ADC, the slice gradient, the slice rephaser, the readout and its prephaser are the same in every TR: one entry each. Each phase-encoding gradient has a different amplitude: ``N_y - 1`` entries (the central line has a zero amplitude, i.e. no event). In total ≈ ``N_y + 3`` trapezoids, while the file contains ``5 N_y`` blocks.
+**Q14** The columns are: block number, block duration (in units of the block raster), RF, GX, GY, GZ, ADC and extension ID (EXT : here the `LIN` label of the readout blocks, stored in the `[EXTENSIONS]` section). Pulseq stores each **distinct** event only once (in the `[RF]`, `[TRAP]`, `[ADC]` sections) and the blocks refer to them by their ID (0 = no event). The RF pulse, the ADC, the slice gradient, the slice rephaser, the readout and its prephaser are the same in every TR: one entry each. Each phase-encoding gradient has a different amplitude: ``N_y - 1`` entries (the central line has a zero amplitude, i.e. no event). In total ≈ ``N_y + 3`` trapezoids, while the file contains ``5 N_y`` blocks.
 
-**Q15** With TR < T₂*, the transverse magnetization has not decayed at the end of the TR. It is excited again by the next pulse and contributes to the following echoes: the signal does not reach a simple spoiled steady state, and it depends on the phase accumulated during each TR (different for each phase-encoding step and each position). This produces **artefacts** (bands, ghosts) and an incorrect contrast. This is why gradient echo sequences use a **gradient spoiler** and **RF spoiling** (next parts). With a long TR (TR ≫ ``T_2``, e.g. 1 s), the transverse magnetization has decayed before the next pulse: the relaxation itself spoils the signal (section 7).
+**Q15** With TR < T₂*, the transverse magnetization has not decayed at the end of the TR. It is excited again by the next pulse and contributes to the following echoes: the signal does not reach a simple spoiled steady state, and it depends on the phase accumulated during each TR (different for each phase-encoding step and each position). This produces **artefacts** (bands, ghosts) and an incorrect contrast. This is why gradient echo sequences use a **gradient spoiler** and **RF spoiling** (next parts). With a long TR (TR ≫ ``T_2``, e.g. 1 s), the transverse magnetization has decayed before the next pulse: the relaxation itself spoils the signal (notebook 4-3).
 """)
-
-# ╔═╡ 5de42120-c974-11f1-96f8-aae81d03624e
-md"""
-**Q16** Compare the size of the phantom with the FOV of the sequence (red rectangle). Is the FOV large enough? What would happen with ``FOV_y`` = 128 mm (try it in section 6.1)?
-""" |> question
-
-# ╔═╡ 5de421c0-c974-11f1-96f8-aae81d03624e
-md"""
-**Q17** The pixel size is ``FOV/N`` = 8 mm. How would you halve it, and what would it cost (gradients, scan time, SNR)?
-
-**Q18** The image is reconstructed with a simple FFT. Which choice made in section 5.2 ensures that the image is centered, without a linear phase?
-""" |> question
-
-# ╔═╡ 5de421de-c974-11f1-96f8-aae81d03624e
-answer_folded(md"""
-**Q16** The phantom extends over ≈ 170 mm along ``x`` and ≈ 205 mm along ``y``: the FOV of 256 × 256 mm contains it, there is no fold-over. With ``FOV_y`` = 128 mm, the parts of the head outside the FOV **fold over** onto the opposite side of the image (basic reconstruction practical, section 6): the FOV along ``y`` must be at least ≈ 210 mm.
-
-**Q17** Double ``N_x`` and ``N_y`` at the same FOV: the readout flat area (``N_x/FOV``) and the phase-encoding areas are doubled (stronger or longer gradients, longer readout or higher bandwidth, longer minimum TE), the scan time ``N_y \times TR`` is doubled and the SNR per voxel is divided by ≈ 2√2 (voxel 4× smaller, acquisition 2× longer).
-
-**Q18** The readout prephaser was shifted by ``-\Delta k/2`` so that the sample ``N_x/2+1`` is exactly ``k_x = 0``, and the phase-encoding areas go from ``-N_y/2`` to ``N_y/2-1`` (in ``\Delta k_y``) with ``k_y = 0`` on line ``N_y/2+1``. This is the convention of the centered FFT: no half-pixel shift (linear phase) appears in the image.
-""")
-
-# ╔═╡ 07f5df3d-05f3-499a-973d-182e46028055
-md"""
-**Q22** Implement the 100 dummy scans and check the results.
-
-**Q23** Increase the TR to 100 ms and 1000 ms. What happens on the image ? Can you explain what happens ?
-""" |> question
-
-# ╔═╡ fc16d7c2-12a2-43b0-909e-278ee5d69f53
-answer_folded(md"""
-**Q22** The image quality is still bad.
-
-**Q23** For TR = 1000 ms, we obtain a "good" image quality.	The long TR creates a natural spoiling, all the transverse magnetization is spoiled due to the $T_2$ effect.	  
-""")
-
-# ╔═╡ 092d2ad4-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q19** The two images were obtained with **the same sequence**. Which one is closer to what the scanner would give? Why?
-
-**Q20** How many isochromats per voxel are needed to simulate a dephasing of $n$ cycles across the voxel?
-""" |> question
-
-# ╔═╡ 092d2ade-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q19** The second one. On the scanner, each voxel contains billions of spins: the dephasing created by the unbalanced gradients is a continuous distribution of phases. In the simulation, the phases of a few isochromats can **re-align** after some TRs and create echoes which do not exist in reality. The artefact of the first image is mostly **numerical**.
-
-**Q20** The phase must be sampled finely over each cycle: at least ≈ 5–10 isochromats per cycle, i.e. ≈ $10n$ isochromats along the direction of the dephasing (see the single-voxel experiment below). Here, $n_{spoil}$ = 2 cycles along $z$ with 20 isochromats.
-""")
-
-# ╔═╡ 092d2b1a-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q21** With 64 isochromats and $\varphi_0$ = 117°, compare the steady-state signal of the three cases with the Ernst equation. Which one is a "spoiled" gradient echo?
-
-**Q22** Decrease the number of isochromats to 4 or 8. What happens to the gradient-spoiled signals? Relate it to section 8.2.
-
-**Q23** Change $\varphi_0$. Is every value suitable? Try 0°, 90°, 117° and 180°.
-
-**Q24** Without any gradient, the signal does not decay to the Ernst value. What is this sequence?
-""" |> question
-
-# ╔═╡ 092d2b24-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q21** Only **gradient + RF spoiling** reaches the Ernst value (≈ 0.098 vs 0.098). The gradient spoiler alone gives a different steady state (≈ 0.107, +9 %): the stimulated echoes still contribute. This difference depends on $T_2$: the contrast is no longer a pure $T_1$ weighting.
-
-**Q22** With too few isochromats, the dephasing over $n$ cycles is badly sampled: the isochromats re-phase and the signals are wrong (the gradient + RF spoiled signal no longer matches the Ernst equation). The simulation needs enough isochromats per cycle of dephasing (≈ 10).
-
-**Q23** No. With $\varphi_0$ = 0° there is no RF spoiling; with 180° the phase alternates and the sequence behaves like a balanced sequence. Only some increments (117°, 50°, ...) make the stimulated echoes add incoherently; 117° (Zur 1991) gives a signal very close to the Ernst equation for most $T_1$/$T_2$.
-
-**Q24** All the isochromats see the same field: nothing dephases the transverse magnetization, which is fully refocused at each TR. This is a **balanced SSFP** (bSSFP / TrueFISP) on resonance: its steady state depends on $T_2/T_1$, not on the Ernst equation.
-""")
-
-# ╔═╡ 092d2b56-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q25** Compare the contrast of the long-TR image and of the spoiled short-TR image (gray matter, white matter, CSF). Explain with the Ernst equation.
-
-**Q26** Why is the difference between the "no spoiler" and "gradient spoiler" images small in this simulation?
-""" |> question
-
-# ╔═╡ 092d2b60-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q25** With TR = 1 s ≫ TR of the spoiled sequence, $E_1 \approx 0$ for most tissues: the signal ≈ $M_0 \sin\alpha$, a **proton density** weighting (CSF, with the highest $\rho$, is bright). With TR = 20 ms and α = 15°, the longitudinal magnetization does not recover: tissues with a short ``T_1`` (white matter) give more signal than tissues with a long ``T_1`` (CSF, ``T_1`` ≈ 2.6 s, dark): **``T_1`` weighting**. In these images the ventricles are not dark yet: the lines are acquired during the approach to the steady state, when the CSF signal is still high (section 9, with dummy scans).
-
-**Q26** Because the "unspoiled" sequence is already **not balanced**: the readout and the slice-selection gradients leave a net area at each TR (section 8.1), which acts as a gradient spoiler. Adding the spoiler only increases this dephasing. The main difference comes from the **RF spoiling**, which removes the contribution of the stimulated echoes (≈ 10 % on the signal).
-""")
-
-# ╔═╡ 092d2bba-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q27** Using the curves of section 9.1, how many dummy scans are needed for the white matter and the gray matter to be within a few percent of their steady state? And for the CSF? What does it cost?
-
-**Q28** Without dummy scans, the line ``k_y = 0`` (TR number $(Ny ÷ 2 + 1)) is acquired during the transient. What is the effect on the contrast and on the image? Why is the problem worse with a **centric** phase-encoding order?
-""" |> question
-
-# ╔═╡ 092d2bce-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q27** The signal converges with a time constant ``T_1^*``: after ``3\,T_1^*`` it is within 5 % of the steady state. Here ``T_1^*`` ≈ 13 TR for the WM and 17 TR for the GM: ≈ 40–50 dummy scans. For the CSF (``T_1`` = 2.6 s), ``T_1^*`` ≈ 24 TR and its signal starts much higher than its steady state: ≈ 70 dummy scans are needed. Each dummy scan costs one TR (here 20 ms): 50 dummy scans = 1 s, negligible for a large matrix but not for a 32-line acquisition.
-
-**Q28** The contrast of the image is mainly set by the center of the k-space: acquired during the transient, the signal is higher than the steady state, and the contrast is closer to a proton density weighting (the CSF is too bright). The modulation of the signal along $k_y$ also creates **blurring/ghosting** along the phase-encoding direction (the PSF is the Fourier transform of the modulation). With a centric order, the center of the k-space is acquired **first**, when the signal is the furthest from the steady state: dummy scans are essential.
-""")
-
-# ╔═╡ 092d36d2-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q29** Explain the three images. Why do we need the labels on a real scanner, although image (c) is correct without them?
-
-**Q30** With dummy scans, the first TRs have no ADC. Do the labels change? Why is it important to put the label in the **readout** block?
-""" |> question
-
-# ╔═╡ 092d36e6-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q29** (a) The profiles are placed in the order of acquisition, as if the order were linear: the lines are scrambled and the image is meaningless. (b) Each profile is placed at the line given by its `LIN` label: the image is correct. (c) KomaMRI computes the k-space position of each sample from the sequence and MRIReco uses this trajectory. The raw data acquired on a scanner (e.g. through the Pulseq interpreter) **do not contain the trajectory**: the reconstruction (vendor, Gadgetron, your own script) relies on the counters (`LIN`, `PAR`, `SLC`, ...) to sort the data.
-
-**Q30** No: dummy scans have no ADC, so no profile is written, and the label of each readout still gives its line. The label must be set in the block of the ADC (or before it): its value at the time of the ADC is written in the profile header. A label placed after the readout would be associated with the next line.
-""")
-
-# ╔═╡ 092d3718-cd5f-11f1-86a2-aae81d03624e
-md"""
-**Q31** Explain the contrast of the two images with the Ernst equation. Which image could be used to estimate a $T_1$ map, and how (variable flip angle method)?
-""" |> question
-
-# ╔═╡ 092d3722-cd5f-11f1-86a2-aae81d03624e
-answer_folded(md"""
-**Q31** At 5°, the signal $\approx M_0 \sin\alpha$ hardly depends on $T_1$ (proton density weighting: the CSF is bright). At 30°, the longitudinal magnetization of the tissues with a long $T_1$ does not recover between the pulses ($T_1$ weighting: the CSF is dark, the white matter bright). The **two** images together give $T_1$: writing the Ernst equation as $S/\sin\alpha = E_1\, S/\tan\alpha + M_0(1 - E_1)$, the slope between the two flip angles gives $E_1 = e^{-TR/T_1}$ in each voxel (DESPOT1 / variable flip angle method).
-""")
-
-# ╔═╡ db148658-cedd-11f1-b46f-aae81d03624e
-md"""
-## 5.6 Durations: always use `sys`
-
-To compute a delay (`make_delay(d)`), we need the duration of the other blocks. A block lasts as long as its longest event, but the time an event really occupies in a block depends on the **scanner**:
-
-* after an RF pulse, the block must last at least the **RF ring-down** time (`RF_ring_down_time`),
-* after the last ADC sample, the block must last at least the **ADC dead time** (`ADC_dead_time`),
-* the RF and ADC samples are placed at the **center** of their raster intervals: the event occupies half an interval more at its edges.
-
-These are properties of the scanner: they are stored in `sys`, **not in the events**. KomaMRI therefore gives two durations:
-
-| | what it measures |
-|:--|:--|
-| `dur(event)` | the event alone (up to its last sample, or the end of the gradient) |
-| `dur(event, sys)` | the time the event **occupies in a block**: with the ring-down, the ADC dead time and the sample edges |
-
-Only `dur(event, sys)` can be used to compute a block duration or a delay. With `dur(event)`, the block is too short: `check_timing` rejects the sequence or, if it is not checked, the next block starts during the ringing of the RF coil (e.g. an ADC records it).
-
-*In pypulseq, `calc_duration(event)` corresponds to `dur(event, sys)`: the ring-down and the dead times are copied into each event when it is created with `system=...`.*
-
-For the events of section 4.3 and a readout:
-"""
-
-# ╔═╡ db1486c6-cedd-11f1-b46f-aae81d03624e
-"""
-    block_duration(events...; sys=sys)
-
-Duration of a block containing `events` (RF, gradients, ADC) : longest event, including
-the RF ring-down and the ADC dead time, rounded up to the block duration raster.
-"""
-block_duration(events...; sys=sys) = ceil_to_raster(maximum(dur(e, sys) for e in events), sys.limits.DUR_Δt)
-
-# ╔═╡ db1486f8-cedd-11f1-b46f-aae81d03624e
-md"""
-The block duration is then the **longest** event, rounded **up** to the block duration raster: this is what the function `block_duration(events...)` below does.
-"""
-
-# ╔═╡ db148716-cedd-11f1-b46f-aae81d03624e
-let
-	gx_demo = make_trapezoid(; flat_area=32 / 0.256, flat_time=32 * 20e-6, sys)
-	adc_demo = make_adc(32; dwell=20e-6, delay=gx_demo.rise, sys)
-	events = [("RF pulse (section 4.3)", rf_ex, "RF ring-down (20 µs) + half an RF raster"),
-		("slice-selection gradient", gz_ex, "none: the duration of a gradient does not depend on sys"),
-		("ADC (32 samples, dwell 20 µs)", adc_demo, "ADC dead time (10 µs) + half a dwell")]
-	rows = ["| $(n) | $(round(dur(e) * 1e6, digits=1)) | $(round(dur(e, sys) * 1e6, digits=1)) | $(round((dur(e, sys) - dur(e)) * 1e6, digits=1)) | $(why) |" for (n, e, why) in events]
-	Markdown.parse("| event | `dur(event)` (µs) | `dur(event, sys)` (µs) | difference (µs) | why |\n|:--|--:|--:|--:|:--|\n" * join(rows, "\n"))
-end
-
-# ╔═╡ db148734-cedd-11f1-b46f-aae81d03624e
-md"""
-**Three rules for the timing calculations**
-
-1. Create the sequences with **`Sequence(sys)`**: the timing definitions of the scanner (rasters, dead times, ring-down) are stored in the sequence and written in the `.seq` file.
-2. Compute the durations with **`dur(event, sys)`**, and the duration of a block with `block_duration(events...)`.
-3. Check the sequence with **`check_timing(seq, sys)`**. With only `check_timing(seq)`, the definitions stored in the sequence are used: for a `Sequence()` created without `sys`, these are the ones of a default scanner, and the errors are **not** detected.
-
-Example: the delay needed to start the readout block at a time ``T`` after the center of the RF pulse, with a prephaser block in between:
-
-```julia
-D_exc = block_duration(rf, gz)                     # excitation block
-D_pre = block_duration(gx_pre, gy_pre, gz_reph)    # prephaser block
-t_rf  = rf.delay + rf.center                       # RF center in the excitation block
-d = round_to_raster(T - (D_exc - t_rf) - D_pre, sys.limits.DUR_Δt)
-@assert d >= 0 "T is too short"
-```
-
-*Note: in section 6.3, the durations are read in `seq.DUR` of a temporary sequence. KomaMRI computes `seq.DUR` with `dur(event)`, without `sys`: it works there only because, in each block, a gradient lasts longer than the RF pulse + ring-down or the ADC + dead time. `block_duration` is always correct.*
-"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -4566,6 +4013,13 @@ version = "1.13.0+0"
 # ╟─db1486f8-cedd-11f1-b46f-aae81d03624e
 # ╠═db1486c6-cedd-11f1-b46f-aae81d03624e
 # ╟─db148734-cedd-11f1-b46f-aae81d03624e
+# ╟─84c57de8-cfaa-11f1-b5d2-aae81d03624e
+# ╠═84c57e92-cfaa-11f1-b5d2-aae81d03624e
+# ╟─9b7b0b6a-cfab-11f1-be9f-aae81d03624e
+# ╠═9b7b0bce-cfab-11f1-be9f-aae81d03624e
+# ╟─9b7b0c00-cfab-11f1-be9f-aae81d03624e
+# ╟─84c57ec4-cfaa-11f1-b5d2-aae81d03624e
+# ╟─84c57ee2-cfaa-11f1-b5d2-aae81d03624e
 # ╟─b2a7cb34-c95c-11f1-99b2-25ec21bd0719
 # ╠═b2a7cb3e-c95c-11f1-aac0-2b86d26acaa3
 # ╟─b2a7cb48-c95c-11f1-a683-c180cbc4be6c
@@ -4596,72 +4050,9 @@ version = "1.13.0+0"
 # ╠═b2a7cc42-c95c-11f1-905e-0b7badd5fc44
 # ╟─b2a7cc4c-c95c-11f1-9fda-393344f7885d
 # ╟─b2a7cc62-c95c-11f1-b2f5-7ffa87d0a69a
-# ╟─5de42076-c974-11f1-96f8-aae81d03624e
-# ╠═5de420d0-c974-11f1-96f8-aae81d03624e
-# ╠═5de42102-c974-11f1-96f8-aae81d03624e
-# ╟─5de42120-c974-11f1-96f8-aae81d03624e
-# ╟─5de42134-c974-11f1-96f8-aae81d03624e
-# ╠═5de42148-c974-11f1-96f8-aae81d03624e
-# ╟─5de4215c-c974-11f1-96f8-aae81d03624e
-# ╠═5de42170-c974-11f1-96f8-aae81d03624e
-# ╟─5de42184-c974-11f1-96f8-aae81d03624e
-# ╠═5de42198-c974-11f1-96f8-aae81d03624e
-# ╠═5de421ac-c974-11f1-96f8-aae81d03624e
-# ╠═5de421c0-c974-11f1-96f8-aae81d03624e
-# ╟─5de421de-c974-11f1-96f8-aae81d03624e
-# ╟─07f5df3d-05f3-499a-973d-182e46028055
-# ╟─fc16d7c2-12a2-43b0-909e-278ee5d69f53
-# ╟─092d29d0-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2a34-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2a5c-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2a70-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2a7a-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2a8e-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2a98-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2aa2-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2aac-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2ac0-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2aca-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2ad4-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2ade-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2ae8-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2af2-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b06-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b10-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b1a-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b24-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b2e-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b38-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b42-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b56-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b60-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b6a-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b74-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b7e-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2b88-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2b92-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2ba6-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d2bb0-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2bba-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d2bce-cd5f-11f1-86a2-aae81d03624e
-# ╟─401e7702-7ff8-47b0-b310-761e3e59acf9
-# ╟─6afc141b-bafd-40e1-a865-958c8c8944f2
-# ╠═f601219a-8b52-46f0-997b-ad9f83c479f5
-# ╠═d443eb8c-7062-4bf1-9578-52a590cb31de
-# ╠═f4253c9c-9f5a-4802-b5e4-0607936616d1
-# ╟─092d31a0-cd5f-11f1-86a2-aae81d03624e
-# ╠═718d4132-1f4e-4458-86e7-19569f00020a
-# ╟─092d3696-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d36aa-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d36be-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d36c8-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d36d2-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d36e6-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d36f0-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d36fa-cd5f-11f1-86a2-aae81d03624e
-# ╠═092d3704-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d3718-cd5f-11f1-86a2-aae81d03624e
-# ╟─092d3722-cd5f-11f1-86a2-aae81d03624e
+# ╟─84c57fc8-cfaa-11f1-b5d2-aae81d03624e
+# ╠═84c57fd2-cfaa-11f1-b5d2-aae81d03624e
+# ╠═84c57fe6-cfaa-11f1-b5d2-aae81d03624e
 # ╟─b2a7cc6a-c95c-11f1-a8e7-e95f1c97f46e
 # ╟─b2a7cc74-c95c-11f1-a21d-0d0a834a9b18
 # ╟─00000000-0000-0000-0000-000000000001

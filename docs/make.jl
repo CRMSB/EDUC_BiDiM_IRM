@@ -23,8 +23,10 @@ makedocs(;
  				   "EPI Reconstruction" => "3-3-EPI.md"],
         "Sequence programming" => ["Pulseq - Basics" => "4-1-pulseq_basic.md",
                                     "Practical - Gradient echo" => "4-1-pulseq_practical.md",
-                                    "Homework - Multi-spin echo" => "4-2-mse_homework.md",],
-       "Motion Artefacts" => ["Intra-scan motion" => "5-1-motion_correction.md"],
+                                    "Simulation and reconstruction" => "4-3-simulation_reconstruction.md",
+                                    "Homework - Multi-spin echo" => "4-2-mse_homework.md",
+                                    ],
+                                    "Motion Artefacts" => ["Intra-scan motion" => "5-1-motion_correction.md"],
 
         ],
 )
