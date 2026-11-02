@@ -116,6 +116,12 @@ end
 
 
 
+# ╔═╡ f4d2bc34-f53a-419c-8900-a4210250d9d2
+begin
+	Mxy_bis(p)=im
+	visuMxy(Mxy_bis)
+end
+
 # ╔═╡ 4cecb481-e70f-4ed6-8a16-90ba400eed97
 md"""
 In that case, they are in phase.
@@ -473,6 +479,9 @@ Q
 
 """
 
+# ╔═╡ 30d5d1a0-aaec-434a-bb78-d5cb8f513714
+
+
 # ╔═╡ 0beeee18-bca7-4dc7-94b1-30058a36085b
 begin
 Q14a=[0.1 0 0.2*im;0.1 0.3 0; 0 0.5*im 0]
@@ -516,12 +525,18 @@ Explanation:
 - Given that $F_0^+$=$(F_0^-)^*$, then $(0.1i)^*=-0.1i$ goes to $F_0^+$
 """
 
+# ╔═╡ ff9088de-a38a-4e54-a378-988a801e9548
+
+
 # ╔═╡ 41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
 begin
 Q_15a=[0.5 0.25 0;0.5 0.1*im 0; 0 0.2 0]
 	Mxy_15a, Mz_15a=fromFtoM(Q_15a)
 visuMxy2D(Mxy_15a)
 end
+
+# ╔═╡ 93b199b9-a799-4a4a-b81b-05be1eacbb1e
+
 
 # ╔═╡ 39933e22-95f5-4167-b8c6-9b1ee5a06d77
 begin
@@ -548,10 +563,13 @@ Mxy_16,Mz_16=fromFtoM(Q_16)
 visuClassic(Mxy_16,Mz_16)
 end	
 
+# ╔═╡ 81b4114c-c961-4426-9604-b48d12379ae5
+Q_16
+
 # ╔═╡ 88d5304a-5578-473a-aae9-bc1b733bc8f3
 begin 
-Q_16b=Q_16*[exp(-20/40) 0 0; 0 exp(-20/40) 0; 0 0 exp(-20/100)]
-Q_16[3,1]=Q_16[3,1]+(1-exp(-20/100))
+Q_16b=[exp(-20/40) 0 0; 0 exp(-20/40) 0; 0 0 exp(-20/100)]*Q_16
+Q_16b[3,1]=Q_16b[3,1]+(1-exp(-20/100))
 Mxy_16b,Mz_16b=fromFtoM(Q_16b)
 visuClassic(Mxy_16b,Mz_16b)
 end	
@@ -631,12 +649,15 @@ end
 # ╔═╡ 09a37845-57a0-4e05-a8f9-061cc77a5b44
 
 begin
-	R18=applyRF(60*pi/180,pi/2)
+	R18=applyRF(60*pi/180,0)
 	Q_18after=R18*Q_18;
 	Mxy_18after,Mz_18after=fromFtoM(Q_18after)
 	visuClassic(Mxy_18after,Mz_18after)
 end
 
+
+# ╔═╡ 628495be-2fb0-4c33-a1a1-9ff1771f2149
+Q_18after
 
 # ╔═╡ 34270e18-f966-49bb-9a0c-d39272ecbd43
 md"""
@@ -672,6 +693,9 @@ R19=applyRF(pi,0)
 Mxy_19after,Mz_19after=fromFtoM(Q_19after)
 visuClassic(Mxy_19after,Mz_19after)
 end
+
+# ╔═╡ 4ee818da-db1b-4a24-a50d-1413ddbe3309
+Q_19after
 
 # ╔═╡ 055cf6ac-2855-4f29-acbb-583d9a415d82
 md"""
@@ -741,7 +765,7 @@ begin
 		#initialization
 		S=zeros(Float64,N)
 		Time=zeros(Float64,N)
-		Q=zeros(ComplexF64,3,N)
+		Q=zeros(ComplexF64,3,2*N)
 		R=zeros(ComplexF64,3,3)
 		Rrefoc=zeros(ComplexF64,3,3)
 		Q[3,1]=1;
@@ -760,8 +784,8 @@ begin
 			if dispfig==1
 			ax=Axis(fig[ec,1],ylabel="n",title=" Before Crush; Ec $ec")
 			ax.xticks=([1,2,3],["F+","F-","Z"])	
-			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
-			for r in 1:3, c in 1:N
+			heatmap!(ax,1:3,0:(2*N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:2*N
     			val = Q[r, c]
     			# White text on dark pixels, Black text on bright pixels
     			txt_color = abs(val) > 0.2 ? :black : :white
@@ -779,8 +803,8 @@ begin
 			if dispfig==1
 			ax=Axis(fig[ec,2],ylabel="n",title=" After Crush, Ec $ec")
 			ax.xticks=([1,2,3],["F+","F-","Z"])	
-			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
-			for r in 1:3, c in 1:N
+			heatmap!(ax,1:3,0:(2*N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:2*N
     			val = (Q[r, c])
     			# White text on dark pixels, Black text on bright pixels
     			txt_color = abs(val) > 0.2 ? :black : :white
@@ -797,8 +821,8 @@ begin
 			if dispfig==1
 			ax=Axis(fig[ec,3],ylabel="n",title=" After 180 , Ec $ec")
 			ax.xticks=([1,2,3],["F+","F-","Z"])	
-			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
-			for r in 1:3, c in 1:N
+			heatmap!(ax,1:3,0:(2*N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:2*N
     			val = (Q[r, c])
     			# White text on dark pixels, Black text on bright pixels
     			txt_color = abs(val) > 0.2 ? :black : :white
@@ -816,8 +840,8 @@ begin
 			if dispfig==1
 			ax=Axis(fig[ec,4],ylabel="n",title=" After Crush; Ec $ec")
 			ax.xticks=([1,2,3],["F+","F-","Z"])	
-			heatmap!(ax,1:3,0:(N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
-			for r in 1:3, c in 1:N
+			heatmap!(ax,1:3,0:(2*N-1),abs.(Q),colormap=:hot,colorrange=(0.0,0.5))
+			for r in 1:3, c in 1:2*N
     			val = (Q[r, c])
     			# White text on dark pixels, Black text on bright pixels
     			txt_color = abs(val) > 0.2 ? :black : :white
@@ -865,7 +889,7 @@ end
 
 # ╔═╡ ec937014-e1eb-4908-ab42-04ed0cbb2a33
 begin
-	Q_20c,S_20c,Time_20c=MESE(alpha_20c,phi,32,TE,T1,T2,0)
+	Q_20c,S_20c,Time_20c=MESE(170*pi/180,phi,32,TE,T1,T2,0)
 	fig_20c=lines(Time_20c,theory,axis=(xlabel="Time[ms]",ylabel="Amplitude"),label="Theory",color=:black)
 	scatter!(Time_20c,S_20c,marker='*',color=:coral,markersize=30,label="EPG")
 	axislegend()
@@ -3630,7 +3654,8 @@ version = "1.13.0+0"
 # ╟─9eede586-5ede-431e-be8c-8dc1a4869b5c
 # ╟─066f2d77-4a57-4396-a86a-9b5eed5e7896
 # ╟─0c73051a-f356-4094-9250-2cb1cc72201d
-# ╟─feb49760-e9de-4738-82cb-d2fa9c8b1376
+# ╠═feb49760-e9de-4738-82cb-d2fa9c8b1376
+# ╠═f4d2bc34-f53a-419c-8900-a4210250d9d2
 # ╟─4cecb481-e70f-4ed6-8a16-90ba400eed97
 # ╟─53bc8b12-8aa9-47f8-8749-0c7aebca433a
 # ╟─43302385-ba8a-4e7b-9cff-2c5bf977d5b8
@@ -3686,7 +3711,7 @@ version = "1.13.0+0"
 # ╟─9f9399e2-9bc5-4fe4-bd6c-392fa247cdbb
 # ╠═b8839df7-50e7-4f68-b159-f5d59da124bc
 # ╟─f8e8eb72-5587-4a4c-8d3d-9d405a495d08
-# ╠═6e3f40c6-de85-4536-8f1d-c714b58f8cdd
+# ╟─6e3f40c6-de85-4536-8f1d-c714b58f8cdd
 # ╟─a6e7c563-0b40-4d0f-9f87-361c169501ab
 # ╟─cde32749-6600-4e36-bf16-21827e5fefb5
 # ╟─816dfb87-d5c0-41e4-872e-e29319035047
@@ -3703,18 +3728,22 @@ version = "1.13.0+0"
 # ╟─a437b267-089e-48bf-85cf-a0288a99a294
 # ╟─63cb3219-59e0-4413-bb0a-ab65a0217a84
 # ╟─e9ef2c4d-ec4b-47fe-add7-4da0fe6c2d19
-# ╟─0beeee18-bca7-4dc7-94b1-30058a36085b
-# ╟─be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
+# ╠═30d5d1a0-aaec-434a-bb78-d5cb8f513714
+# ╠═0beeee18-bca7-4dc7-94b1-30058a36085b
+# ╠═be10ee02-f5cf-4ac9-87d6-d1d6fba915cb
 # ╟─a8a706b8-5063-4997-b454-2cc915a1d3ed
 # ╟─0c9e9709-0f08-42cf-8ebe-34fb924364a9
 # ╟─68921972-27a3-4e3b-a7fd-076d8eda1622
 # ╟─0e0a39ed-d409-427f-b67a-4050d3a73810
-# ╟─41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
-# ╟─39933e22-95f5-4167-b8c6-9b1ee5a06d77
+# ╠═ff9088de-a38a-4e54-a378-988a801e9548
+# ╠═41b8fdd5-94d1-4299-96ac-a489e4f9ae2c
+# ╠═93b199b9-a799-4a4a-b81b-05be1eacbb1e
+# ╠═39933e22-95f5-4167-b8c6-9b1ee5a06d77
 # ╟─e3fa2fc9-443f-4590-bfc2-32c346c70b4d
 # ╟─70f9159c-0aa8-41f4-bea6-959e697ea3d1
-# ╟─349e6d5c-664a-4905-94fe-51f1f4690298
-# ╟─88d5304a-5578-473a-aae9-bc1b733bc8f3
+# ╠═349e6d5c-664a-4905-94fe-51f1f4690298
+# ╠═81b4114c-c961-4426-9604-b48d12379ae5
+# ╠═88d5304a-5578-473a-aae9-bc1b733bc8f3
 # ╟─cd4c5b9d-4e23-48d1-afa1-781d86563a1f
 # ╟─0415830d-0026-4392-8b0d-f699fe445cea
 # ╟─3698965a-6f37-4639-823f-cdc679d9dffb
@@ -3729,14 +3758,16 @@ version = "1.13.0+0"
 # ╟─bccdb23f-057c-471b-8257-0851fdd9b853
 # ╟─4b629172-2340-4dab-a73a-0aabbea61011
 # ╟─3bc9286d-84d7-48cd-83dd-63499cd362e8
-# ╟─09a37845-57a0-4e05-a8f9-061cc77a5b44
+# ╠═09a37845-57a0-4e05-a8f9-061cc77a5b44
+# ╠═628495be-2fb0-4c33-a1a1-9ff1771f2149
 # ╟─34270e18-f966-49bb-9a0c-d39272ecbd43
 # ╟─caa2e5b7-c4a2-492c-b1dc-5cf875d88a49
 # ╟─1baac32b-9472-48e4-bcd9-19bf34735784
 # ╟─74b4d9c1-8f97-4eb4-a7eb-408b4b9616ee
 # ╟─b18a5a3c-49b5-4db4-9c3e-92622acb2178
 # ╟─065491a5-e39b-431d-ad8e-42fcda40f34b
-# ╟─0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+# ╠═0c85c57a-c4e6-4c93-9cfd-dd9fe388bf34
+# ╠═4ee818da-db1b-4a24-a50d-1413ddbe3309
 # ╟─f0f11355-abc5-4c3c-af7c-cffc781cb316
 # ╟─055cf6ac-2855-4f29-acbb-583d9a415d82
 # ╟─aae6009d-35d4-4b3d-95d5-c7071f7efd79
@@ -3749,16 +3780,16 @@ version = "1.13.0+0"
 # ╟─822102cb-52e3-4184-b74d-283275f3a291
 # ╟─e520500b-036c-4d84-b15c-9163ec2783a6
 # ╟─0f21e602-1779-45fc-ae8a-ae920f69e9fb
-# ╟─ef758214-468f-4ba4-bb53-646f9eed6811
-# ╟─06d3f755-6c85-425d-930f-16ec0a6334a5
+# ╠═ef758214-468f-4ba4-bb53-646f9eed6811
+# ╠═06d3f755-6c85-425d-930f-16ec0a6334a5
 # ╟─cdb77e2f-985b-454f-acf2-b42e5510966d
 # ╟─530aae7d-c72f-4bc9-928a-ec75b3866d64
 # ╟─177660e1-4cb8-477b-acda-17ee3183925c
-# ╟─ec937014-e1eb-4908-ab42-04ed0cbb2a33
+# ╠═ec937014-e1eb-4908-ab42-04ed0cbb2a33
 # ╟─fe896a03-f584-44bd-9109-edfa42e4bb28
 # ╟─b7d24b5c-a7bc-4f09-a1c6-c7d6c465aca5
 # ╟─2d44ed1c-54b8-4bdf-a853-255e22466e53
-# ╟─5473b416-7492-48a4-bdbd-c863c9f67d12
+# ╠═5473b416-7492-48a4-bdbd-c863c9f67d12
 # ╟─56bd4920-6be3-40c1-8256-ee2c2ab9da77
 # ╟─f60f56fd-af2c-4254-858e-13323742f12e
 # ╟─6ccbe255-748e-4e5a-bb3d-68500d1838be
