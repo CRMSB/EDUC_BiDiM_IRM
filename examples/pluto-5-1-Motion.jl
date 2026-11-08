@@ -67,7 +67,7 @@ md"""
 # ╔═╡ ce85778e-c939-11f1-a186-e98bf7b3f0a9
 md"""
 
-The dataset of this session is a 2D axial brain slice. The k-space is **fully sampled** on a Cartesian grid. The file contains `im`: the image, size $N_x \times N_y \times N_c$
+The dataset of this session is a 2D axial brain slice. The k-space is **fully sampled** on a Cartesian grid. The file contains `im`: the image, size $(N_x \times N_y)$
 
 
 !!! warning "Path to the data"
@@ -107,16 +107,6 @@ begin
 	fft2c(x) = fftshift(fft(ifftshift(x, (1, 2)), (1, 2)), (1, 2))
 end
 
-# ╔═╡ 2b0225c8-1b33-4997-87b3-8dc8544b945c
-begin 
-	kspace= fft2c(ima);
-	f1 = Figure(size=(1100, 330))
-	show_img!(f1[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-	show_ksp!(f1[1, 2], kspace[:, :]; title="k-space Magnitude(log₁₀|k|)")	
-	show_ksp_angle!(f1[1, 3], kspace[:, :]; title="k-space Phase")	
-	f1
-end
-
 # ╔═╡ ce8577d4-c939-11f1-ae8b-c7f121718b79
 md"""
 # 2. Motion artefacts
@@ -136,15 +126,16 @@ function simulate_motion_kspace(img, trans_x,trans_y,rot)
     kspace_corrupted = zeros(ComplexF64, rows, cols)
     
     for i in 1:rows
-        theta = deg2rad(rot[i])
-        dx = trans_x[i]
-        dy = trans_y[i]
+        #(ATTENTION the warp function applies the inverse of function that's why we use -)
+        theta = deg2rad(-rot[i])
+        dx = -trans_x[i] 
+        dy = -trans_y[i]
         
-        #  (Translation + Centered Rotation )
+        #  (tfm is defined as Translation then Centered Rotation so that warp will apply the rotation and then the translation)
         c = center(img)
         tfm = recenter(RotMatrix(theta), c) ∘ Translation(dx, dy)
  
-        # apply the transform for the time t (line i)
+        # apply the transform for the time t (line i) 
         img_moved = warp(img, tfm, axes(img), fillvalue=0)
 
        
@@ -161,41 +152,6 @@ function simulate_motion_kspace(img, trans_x,trans_y,rot)
     return img_corrupted, kspace_corrupted
 end
     
-end
-
-# ╔═╡ bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
-begin 
-x=1:Nx
-trans_x_2=zeros(Nx)
-trans_y_2=zeros(Nx)
-trans_x_2[1:100].=-10
-trans_x_2[101:(Nx-100)].=0
-trans_x_2[(Nx-99):Nx].=10
-rot_2=zeros(Nx)
-ima_corrupted_2,ksp_corrupted_2=simulate_motion_kspace(ima, trans_x_2,trans_y_2,rot_2)
-f2 = Figure(size=(1100, 330))
-show_img!(f2[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f2[1, 2], abs.(ima_corrupted_2[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-ax2 = Axis(f2[1, 3], title="Motion Profile (trans_x)")
-lines!(ax2, x, trans_x_2)
-f2
-end
-
-# ╔═╡ 3af34ce3-2789-49a6-b18b-a1beb5120d03
-begin
-
-T=30
-trans_x_3=4*sin.(2*pi*x/T)
-trans_y_3=zeros(Nx)
-rot_3=zeros(Nx)
-
-ima_corrupted_3,ksp_corrupted_3=simulate_motion_kspace(ima, trans_x_3,trans_y_3,rot_3)
-f3 = Figure(size=(1100, 330))
-show_img!(f3[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f3[1, 2], abs.(ima_corrupted_3[:, :]); title="magnitude" ,colorrange=(0,1500))
-ax = Axis(f3[1, 3], title="Motion Profile (trans_x)")
-lines!(ax, x, trans_x_3)
-f3
 end
 
 # ╔═╡ 1f4777bc-a37a-486c-ba88-7ffb4944a9b4
@@ -235,23 +191,6 @@ end
     
 end
 
-# ╔═╡ 5d9e5be7-c056-4baa-9d72-a85038baf551
-begin 
-vessel=zeros(Nx,Ny)
-vessel[100:110,100:110].=1000
-ima_vessel=vessel+ima;
-T4=10
-intensity = 1 .+ 10 .* cos.(2π .* x ./ T4)
-ima_vessel_corrupted,ksp_vessel_corrupted=simulate_pulse_kspace(ima,vessel, intensity) 
-f4 = Figure(size=(1100, 330))
-show_img!(f4[1, 1], abs.(ima_vessel); title="magnitude",colorrange=(0,1500))
-show_img!(f4[1, 2], abs.(ima_vessel_corrupted); title = "magnitude corrupted",colorrange=(0,1500))
-ax4 = Axis(f4[1, 3], title="Intensity prrofile")
-lines!(ax4, x, intensity)
-f4
-
-end
-
 # ╔═╡ ce857914-c939-11f1-ac3e-09bdb3a2341f
 md"""
 # 3. K-space corruption
@@ -263,58 +202,10 @@ md"""
 ## 3.1 Rotation
 """
 
-# ╔═╡ 2d19ae25-3338-49c8-8f8e-250ba4c92d42
-begin 
-trans_x_5=zeros(Nx,1)
-trans_y_5=zeros(Nx,1)
-rot_5=zeros(Nx,1)
-rot_5[1:Nx].=10;
-
-ima_corrupted_5,ksp_corrupted_5=simulate_motion_kspace(ima, trans_x_5,trans_y_5,rot_5)
-f5 = Figure(size=(1100, 330))
-show_img!(f5[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f5[1, 2], abs.(ima_corrupted_5[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-f5
-end
-
-# ╔═╡ e39eb57f-c010-4c88-ba03-2699c268aaad
-begin
-f5b= Figure(size=(1100, 330))
-show_ksp!(f5b[1, 1], abs.(kspace[:, :]); title="kspace")
-show_ksp!(f5b[1, 2], abs.(ksp_corrupted_5[:, :]); title="kspace corrupted")
-f5b
-end
-
 # ╔═╡ 10f8f35f-f43b-4054-b3fb-ad12925a668f
 md"""
 ## 3.2 Translation
 """
-
-# ╔═╡ 60635396-7db8-4d90-a32b-b1a6704bbf8c
-begin 
-trans_x_6=zeros(Nx,1)
-trans_x_6[1:Nx].=10
-trans_y_6=zeros(Nx,1)
-rot6=zeros(Nx,1)
-
-
-ima_corrupted_6,ksp_corrupted_6=simulate_motion_kspace(ima, trans_x_6,trans_y_6,rot6)
-f6 = Figure(size=(1100, 330))
-show_img!(f6[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
-show_img!(f6[1, 2], abs.(ima_corrupted_6[:, :]); title="magnitude corrupted",colorrange=(0,1500))
-f6
-end
-
-# ╔═╡ b1ef0ba6-b06a-400c-bf30-12763631f400
-begin
-f6b= Figure(size=(1100, 330))
-show_ksp_angle!(f6b[1, 1], kspace[:, :]; title="phase of the kspace")
-show_ksp_angle!(f6b[1, 2], ksp_corrupted_6[:, :]; title="phase of the corrupted kspace")
-show_ksp_angle!(f6b[1, 3], ksp_corrupted_6.*conj.(kspace); title="phase difference")
-ax6 = Axis(f6b[1, 4], title="Line profile")
-lines!(ax6, angle.(ksp_corrupted_6[:,112].*conj.(kspace[:,112])))
-f6b
-end
 
 # ╔═╡ ce857978-c939-11f1-adf3-c3c0894ef2f2
 md"""
@@ -345,8 +236,8 @@ begin
             dy = trans_y[i]
 
             for j in 1:Ny                   # échantillon j le long de la ligne
-            # Phase introduite par la translation : 2π (kx·dx/Nx + ky·dy/Ny)
-            phase = 2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
+            # Phase introduite par la translation : -2π (kx·dx/Nx + ky·dy/Ny)
+            phase = -2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
 
             # On la retire en multipliant par la phase conjuguée e^{-iφ}
             ksp_corr[i, j] = ksp_corrupted[i, j] * exp(-im * phase)
@@ -355,26 +246,6 @@ begin
         img_corr = abs.(ifft2c(ksp_corr))
         return img_corr
     end
-end
-
-# ╔═╡ c02b8f3a-012b-402e-bcbf-127de67dc381
-begin
-img_corr_2= correct_translation(ksp_corrupted_2,trans_x_2,trans_y_2)
-f7= Figure(size=(1100, 330))
-show_img!(f7[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
-show_img!(f7[1, 2], abs.(ima_corrupted_2[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f7[1, 3], abs.(img_corr_2[:, :]); title="corrected",colorrange=(0,1500))
-f7
-end
-
-# ╔═╡ 64f8c17b-7f1b-4abe-96d1-28de47b14787
-begin
-img_corr_3= correct_translation(ksp_corrupted_3,trans_x_3,trans_y_3)
-f7b= Figure(size=(1100, 330))
-show_img!(f7b[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
-show_img!(f7b[1, 2], abs.(ima_corrupted_3[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f7b[1, 3], abs.(img_corr_3[:, :]); title="corrected",colorrange=(0,1500))
-f7b
 end
 
 # ╔═╡ 9e94dc41-0719-4da3-aa32-b13e7f7658c4
@@ -395,7 +266,7 @@ function correct_rotation(ksp, rot)
 
     nodes = zeros(2, Nx * Ny)
     for j in 1:Ny, i in 1:Nx                  
-        c, s = cos(rot_rad[i]), sin(rot_rad[i])
+        c, s = cos(-rot_rad[i]), sin(-rot_rad[i]) # apply the inverse rotation
         kxr = c * kx[i]/Nx - s * ky[j]/Ny          
         kyr = s * kx[i]/Nx + c * ky[j]/Ny
         nodes[:, i + (j - 1) * Nx] .= (kxr, kyr)   # normalised to [-0.5, 0.5)
@@ -405,14 +276,10 @@ function correct_rotation(ksp, rot)
     data  = ComplexF64.(vec(ksp))[keep]
     p     = plan_nfft(nodes[:, keep], (Nx, Ny))
 
-     # Density compensation (Pipe–Menon iterations)
-    w = ones(ComplexF64, count(keep))
-    for _ in 1:10
-        w ./= abs.(p * (adjoint(p) * w))
-    end
+  
 
-    img_corr = adjoint(p) * (data .* w)             # gridding reconstruction
-    img_corr= img_corr ./ (Nx * Ny) .* (count(keep) / sum(real, w))  # rough intensity rescaling
+    img_corr = adjoint(p) * (data )             # gridding reconstruction
+    img_corr= img_corr ./ (Nx * Ny)  # rough intensity rescaling
 
 
     return img_corr
@@ -424,19 +291,9 @@ md"""
 >⚠️Ideally, density compensation function should be used with the nufft. For simplicity, it is not implemented here. 
 """
 
-# ╔═╡ 7dda83db-4263-4851-b97e-62b9f5fa6d17
-begin
-img_corr_5 = correct_rotation(ksp_corrupted_5,rot_5)
-f8= Figure(size=(1100, 330))
-show_img!(f8[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
-show_img!(f8[1, 2], abs.(ima_corrupted_5[:, :]); title="corrupted",colorrange=(0,1500))
-show_img!(f8[1, 3], abs.(img_corr_5[:, :]); title="corrected",colorrange=(0,1500))
-f8
-end
-
 # ╔═╡ 3824b2f4-f792-4e89-8750-7950417e8493
 md"""
-## 4.2 Correct for both  
+## 4.3 Correct for both  
 """
 
 # ╔═╡ f66d9ef4-8f6b-42dc-8c06-2c208ae2d962
@@ -449,23 +306,24 @@ function correct_motion(ksp, trans_x, trans_y, rot)
     kx = (0:Nx-1) .- Nx ÷ 2                
     ky = (0:Ny-1) .- Ny ÷ 2
 
-   
+   # first we correct for the translation (since we simulate motionas rotation then translation)
     for i in 1:Nx                       # ligne i = acquise à l'instant tᵢ
             dx = trans_x[i]                 # déplacement de l'objet pendant cette ligne (pixels)
             dy = trans_y[i]
 
-            for j in 1:Ny                   # échantillon j le long de la ligne
-            # Phase introduite par la translation : 2π (kx·dx/Nx + ky·dy/Ny)
-            phase = 2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
+            for j in 1:Ny                   # sample j along the line i 
+            # Phase introduced by the translation : -2π (kx·dx/Nx + ky·dy/Ny)
+            phase = -2π * (kx[i] * dx / Nx + ky[j] * dy / Ny)
 
-            # On la retire en multipliant par la phase conjuguée e^{-iφ}
+            # we take it back by multiplying by the conjugate e^{-iφ}
             ksp_corr[i, j] = ksp[i, j] * exp(-im * phase)
             end
     end
-    
+
+    # the we correct for rotation 
     nodes = zeros(2, Nx * Ny)
     for j in 1:Ny, i in 1:Nx                  
-        c, s = cos(rot_rad[i]), sin(rot_rad[i])
+        c, s = cos(-rot_rad[i]), sin(-rot_rad[i])
         kxr = c * kx[i]/Nx - s * ky[j]/Ny          
         kyr = s * kx[i]/Nx + c * ky[j]/Ny
         nodes[:, i + (j - 1) * Nx] .= (kxr, kyr)   # normalised to [-0.5, 0.5)
@@ -480,24 +338,6 @@ function correct_motion(ksp, trans_x, trans_y, rot)
 
     return img_corr
 end
-end
-
-# ╔═╡ 92254584-fdbe-4f90-8b63-a5389166c141
-begin
-
-trans_x_11=4*sin.(2*pi*x/30)
-trans_y_11=(1:Nx)/10
-rot_11=(1:Nx)/10
-
-ima_corrupted_11,ksp_corrupted_11=simulate_motion_kspace(ima, trans_x_11,trans_y_11,rot_11)
-
-ima_corrected_11=correct_motion(ksp_corrupted_11, trans_x_11, trans_y_11, rot_11) 
-
-f11 = Figure(size=(1100, 330))
-show_img!(f11[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
-show_img!(f11[1, 2], abs.(ima_corrupted_11[:, :]); title="corrupted" ,colorrange=(0,1500))
-show_img!(f11[1, 3], abs.(ima_corrected_11[:, :]); title="corrected" ,colorrange=(0,1500))
-f11
 end
 
 # ╔═╡ c8f88fe3-6bb6-4d6e-88cf-10387e7acd7f
@@ -568,6 +408,164 @@ begin
 
 end;
 
+# ╔═╡ 2b0225c8-1b33-4997-87b3-8dc8544b945c
+begin 
+	kspace= fft2c(ima);
+	f1 = Figure(size=(1100, 330))
+	show_img!(f1[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
+	show_ksp!(f1[1, 2], kspace[:, :]; title="k-space Magnitude(log₁₀|k|)")	
+	show_ksp_angle!(f1[1, 3], kspace[:, :]; title="k-space Phase")	
+	f1
+end
+
+# ╔═╡ bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
+begin 
+x=1:Nx
+trans_x_2=zeros(Nx)
+trans_y_2=zeros(Nx)
+trans_x_2[1:100].=-10
+trans_x_2[101:(Nx-100)].=0
+trans_x_2[(Nx-99):Nx].=10
+rot_2=zeros(Nx)
+ima_corrupted_2,ksp_corrupted_2=simulate_motion_kspace(ima, trans_x_2,trans_y_2,rot_2)
+f2 = Figure(size=(1100, 330))
+show_img!(f2[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
+show_img!(f2[1, 2], abs.(ima_corrupted_2[:, :]); title="magnitude corrupted",colorrange=(0,1500))
+ax2 = Axis(f2[1, 3], title="Motion Profile (trans_x)")
+lines!(ax2, x, trans_x_2)
+f2
+end
+
+# ╔═╡ 3af34ce3-2789-49a6-b18b-a1beb5120d03
+begin
+
+T=30
+trans_x_3=4*sin.(2*pi*x/T)
+trans_y_3=zeros(Nx)
+rot_3=zeros(Nx)
+
+ima_corrupted_3,ksp_corrupted_3=simulate_motion_kspace(ima, trans_x_3,trans_y_3,rot_3)
+f3 = Figure(size=(1100, 330))
+show_img!(f3[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
+show_img!(f3[1, 2], abs.(ima_corrupted_3[:, :]); title="magnitude" ,colorrange=(0,1500))
+ax = Axis(f3[1, 3], title="Motion Profile (trans_x)")
+lines!(ax, x, trans_x_3)
+f3
+end
+
+# ╔═╡ 5d9e5be7-c056-4baa-9d72-a85038baf551
+begin 
+vessel=zeros(Nx,Ny)
+vessel[100:110,100:110].=1000
+ima_vessel=vessel+ima;
+T4=10
+intensity = 1 .+ 10 .* cos.(2π .* x ./ T4)
+ima_vessel_corrupted,ksp_vessel_corrupted=simulate_pulse_kspace(ima,vessel, intensity) 
+f4 = Figure(size=(1100, 330))
+show_img!(f4[1, 1], abs.(ima_vessel); title="magnitude",colorrange=(0,1500))
+show_img!(f4[1, 2], abs.(ima_vessel_corrupted); title = "magnitude corrupted",colorrange=(0,1500))
+ax4 = Axis(f4[1, 3], title="Intensity prrofile")
+lines!(ax4, x, intensity)
+f4
+
+end
+
+# ╔═╡ 2d19ae25-3338-49c8-8f8e-250ba4c92d42
+begin 
+trans_x_5=zeros(Nx,1)
+trans_y_5=zeros(Nx,1)
+rot_5=zeros(Nx,1)
+rot_5[1:Nx].=10;
+
+ima_corrupted_5,ksp_corrupted_5=simulate_motion_kspace(ima, trans_x_5,trans_y_5,rot_5)
+f5 = Figure(size=(1100, 330))
+show_img!(f5[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
+show_img!(f5[1, 2], abs.(ima_corrupted_5[:, :]); title="magnitude corrupted",colorrange=(0,1500))
+f5
+end
+
+# ╔═╡ e39eb57f-c010-4c88-ba03-2699c268aaad
+begin
+f5b= Figure(size=(1100, 330))
+show_ksp!(f5b[1, 1], abs.(kspace[:, :]); title="kspace")
+show_ksp!(f5b[1, 2], abs.(ksp_corrupted_5[:, :]); title="kspace corrupted")
+f5b
+end
+
+# ╔═╡ 60635396-7db8-4d90-a32b-b1a6704bbf8c
+begin 
+trans_x_6=zeros(Nx,1)
+trans_x_6[1:Nx].=10
+trans_y_6=zeros(Nx,1)
+rot6=zeros(Nx,1)
+
+
+ima_corrupted_6,ksp_corrupted_6=simulate_motion_kspace(ima, trans_x_6,trans_y_6,rot6)
+f6 = Figure(size=(1100, 330))
+show_img!(f6[1, 1], abs.(ima[:, :]); title="magnitude",colorrange=(0,1500))
+show_img!(f6[1, 2], abs.(ima_corrupted_6[:, :]); title="magnitude corrupted",colorrange=(0,1500))
+f6
+end
+
+# ╔═╡ b1ef0ba6-b06a-400c-bf30-12763631f400
+begin
+f6b= Figure(size=(1100, 330))
+show_ksp_angle!(f6b[1, 1], kspace[:, :]; title="phase of the kspace")
+show_ksp_angle!(f6b[1, 2], ksp_corrupted_6[:, :]; title="phase of the corrupted kspace")
+show_ksp_angle!(f6b[1, 3], ksp_corrupted_6.*conj.(kspace); title="phase difference")
+ax6 = Axis(f6b[1, 4], title="Line profile")
+lines!(ax6, angle.(ksp_corrupted_6[:,112].*conj.(kspace[:,112])))
+f6b
+end
+
+# ╔═╡ c02b8f3a-012b-402e-bcbf-127de67dc381
+begin
+img_corr_2= correct_translation(ksp_corrupted_2,trans_x_2,trans_y_2)
+f7= Figure(size=(1100, 330))
+show_img!(f7[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
+show_img!(f7[1, 2], abs.(ima_corrupted_2[:, :]); title="corrupted",colorrange=(0,1500))
+show_img!(f7[1, 3], abs.(img_corr_2[:, :]); title="corrected",colorrange=(0,1500))
+f7
+end
+
+# ╔═╡ 64f8c17b-7f1b-4abe-96d1-28de47b14787
+begin
+img_corr_3= correct_translation(ksp_corrupted_3,trans_x_3,trans_y_3)
+f7b= Figure(size=(1100, 330))
+show_img!(f7b[1, 1], abs.(ima[:, :]); title="orriginal",colorrange=(0,1500))
+show_img!(f7b[1, 2], abs.(ima_corrupted_3[:, :]); title="corrupted",colorrange=(0,1500))
+show_img!(f7b[1, 3], abs.(img_corr_3[:, :]); title="corrected",colorrange=(0,1500))
+f7b
+end
+
+# ╔═╡ 7dda83db-4263-4851-b97e-62b9f5fa6d17
+begin
+img_corr_5 = correct_rotation(ksp_corrupted_5,rot_5)
+f8= Figure(size=(1100, 330))
+show_img!(f8[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
+show_img!(f8[1, 2], abs.(ima_corrupted_5[:, :]); title="corrupted",colorrange=(0,1500))
+show_img!(f8[1, 3], abs.(img_corr_5[:, :]); title="corrected",colorrange=(0,1500))
+f8
+end
+
+# ╔═╡ 92254584-fdbe-4f90-8b63-a5389166c141
+begin
+
+trans_x_11=4*sin.(2*pi*x/10)
+trans_y_11=(1:Nx)/10
+rot_11=(1:Nx)/10
+
+ima_corrupted_11,ksp_corrupted_11=simulate_motion_kspace(ima, trans_x_11,trans_y_11,rot_11)
+
+ima_corrected_11=correct_motion(ksp_corrupted_11, trans_x_11, trans_y_11, rot_11) 
+
+f11 = Figure(size=(1100, 330))
+show_img!(f11[1, 1], abs.(ima[:, :]); title="original",colorrange=(0,1500))
+show_img!(f11[1, 2], abs.(ima_corrupted_11[:, :]); title="corrupted" ,colorrange=(0,1500))
+show_img!(f11[1, 3], abs.(ima_corrected_11[:, :]); title="corrected" ,colorrange=(0,1500))
+f11
+end
+
 # ╔═╡ ce857c52-c939-11f1-a1a6-0357bdfc8bdc
 begin
 	hint(text) = Markdown.MD(Markdown.Admonition("hint", "Hint", [text]))
@@ -599,7 +597,7 @@ md"""
 
 # ╔═╡ c66709c1-a212-4f3b-8c19-e768dbb71682
 md"""
-**Q2** If  the patient had his head shifted by 1cm to the right during the 100 first lines and 1cm to the left druring the 100 last lines. What artefact can you see in the image  ?  
+**Q2** If  the patient had his head shifted by 1cm toward -x during the 100 first lines and 1cm towards +x during the 100 last lines. What artefact can you see in the image  ?  
 """|>question
 
 # ╔═╡ a0c85fd8-297c-42cf-9cb9-8575709815e4
@@ -658,39 +656,14 @@ A translation in the image domain is a phase ramp in the k-space
 
 # ╔═╡ fd195341-4cd5-4577-bb23-a5a062338b90
 md"""
-**Q7** Correct the images created in **Q2** and **Q6**.
-Create a function that correct for the motiton in the k-space assuming we know the motion that occurred (camera, navigators ...)
+**Q7** Correct the images created in **Q2** and **Q3**.
+Create a function that correct for the motion in the k-space assuming we know the motion that occurred (camera, navigators ...)
 """|>question
 
 # ╔═╡ 828be7e3-10a7-456e-b808-caf40e2a5e5a
 md"""
 **Q8** Can you write a function that corrects for rotation and apply it to the corrupted image of **Q5** ?
 """|>question
-
-# ╔═╡ 3a1fec8b-05f4-4db3-9ec4-6c6333cd3a53
-md"""
-**Q9** Why do we apply 'rot' and not '-rot' for the correction of rotation  ? 
-"""|>question
-
-# ╔═╡ c2f189ca-18fe-4bfc-ba2a-327c1c05adb6
-md"""
-Because the correction doesn’t rotate the image backwards: it puts each sample back where it really came from.
-
-In other words, the value stored at grid position k is the value of the reference k-space at the point R(θ)·k. It is a genuine sample of M, just stored at the wrong address.
-
-
-We don’t change the value; we fix its address. We tell the NFFT “this sample is located at R(θ)·k”. The NFFT then reconstructs the reference image directly, because every sample is now a sample of M placed at the right position. The inversion lies in this relocation: starting from k, R(θ) takes the sample back to its original position.
-
-With -rot, You would be saying the sample comes from R(−θ)·k, when it actually comes from R(θ)·k. The position error is 2θ, and the image comes out rotated by 2θ.
-
-Why translation is corrected with a minus sign
-
-For translation, we act on the value: the data was multiplied by e^{+iφ}, so we multiply it by e^{−iφ}.
-For rotation, we act on the position: we reuse the transformation that was applied, R(θ), to find where the sample was taken in the reference k-space.
-
-Both corrections undo the motion, but one works on the values and the other on the coordinates, hence the different sign.
-
-"""|>answer_folded
 
 # ╔═╡ e97fe6fa-9ae7-49ae-aa4f-5af1ada736b2
 md"""
@@ -707,7 +680,7 @@ md"""
 
 # ╔═╡ 8e7399e4-776e-4410-849e-5e719d324002
 md"""
-**⚠️ Order of translation and rotation.** A rigid motion combines a rotation $R$ and a translation $\mathbf{d}$, but the two operations do not commute: "translate then rotate", $m(R(\mathbf{x}+\mathbf{d}))$, is not the same as "rotate then translate", $m(R\mathbf{x}+\mathbf{d})$. In this practical session, the motion is simulated as translation then rotation. 
+**⚠️ Order of translation and rotation.** A rigid motion combines a rotation $R$ and a translation $\mathbf{d}$, but the two operations do not commute: "translate then rotate", $m(R(\mathbf{x}+\mathbf{d}))$, is not the same as "rotate then translate", $m(R\mathbf{x}+\mathbf{d})$. In this practical session, the motion is simulated as rotation the translation. 
 """|>important
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2907,11 +2880,11 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╟─ce848b7e-c939-11f1-b0e6-0b6babc5505a
-# ╠═ce857734-c939-11f1-a910-9de016fca185
-# ╠═ce857766-c939-11f1-a743-c7bd01aef4da
-# ╠═ce857782-c939-11f1-b207-a90fed7c07e9
+# ╟─ce857734-c939-11f1-a910-9de016fca185
+# ╟─ce857766-c939-11f1-a743-c7bd01aef4da
+# ╟─ce857782-c939-11f1-b207-a90fed7c07e9
 # ╟─3a7a738d-129b-41a4-9a44-c9bdfcd3e180
-# ╟─ce85778e-c939-11f1-a186-e98bf7b3f0a9
+# ╠═ce85778e-c939-11f1-a186-e98bf7b3f0a9
 # ╟─ce8577a2-c939-11f1-a52f-4f78ed5cd323
 # ╟─ce8577b6-c939-11f1-8693-11da8d5aab7f
 # ╟─fdb70cb8-888b-4434-9e60-7640310316a2
@@ -2922,11 +2895,11 @@ version = "1.13.0+0"
 # ╠═2b0225c8-1b33-4997-87b3-8dc8544b945c
 # ╟─ce8577d4-c939-11f1-ae8b-c7f121718b79
 # ╠═6e0f5aaf-9af1-497a-a9e9-361c0e11b43c
-# ╟─c66709c1-a212-4f3b-8c19-e768dbb71682
-# ╟─bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
+# ╠═c66709c1-a212-4f3b-8c19-e768dbb71682
+# ╠═bd60d4d7-52f9-4fe6-804f-bb219a3cfcdb
 # ╟─a0c85fd8-297c-42cf-9cb9-8575709815e4
 # ╟─dad5a8ee-75d3-4418-b876-a2a11099d636
-# ╟─3af34ce3-2789-49a6-b18b-a1beb5120d03
+# ╠═3af34ce3-2789-49a6-b18b-a1beb5120d03
 # ╟─af5db716-1396-4805-bf1f-4c2e87f07396
 # ╟─1f4777bc-a37a-486c-ba88-7ffb4944a9b4
 # ╟─109778b6-7d2f-49a3-9982-28d34c61910e
@@ -2942,25 +2915,23 @@ version = "1.13.0+0"
 # ╟─d24a7403-5615-4d9d-833f-d808947be37b
 # ╟─10f8f35f-f43b-4054-b3fb-ad12925a668f
 # ╟─dc350c3a-542a-4726-9c48-605be648bb87
-# ╟─60635396-7db8-4d90-a32b-b1a6704bbf8c
+# ╠═60635396-7db8-4d90-a32b-b1a6704bbf8c
 # ╟─b1ef0ba6-b06a-400c-bf30-12763631f400
 # ╟─7d052ad4-3902-4479-ad06-10430b341958
 # ╟─ce857978-c939-11f1-adf3-c3c0894ef2f2
 # ╟─74504ba7-0e74-4482-95eb-8a019bdb27a0
-# ╟─fd195341-4cd5-4577-bb23-a5a062338b90
-# ╟─9d03e74b-9ec2-49a7-8bce-bffabc2b49a2
-# ╟─c02b8f3a-012b-402e-bcbf-127de67dc381
-# ╟─64f8c17b-7f1b-4abe-96d1-28de47b14787
-# ╟─9e94dc41-0719-4da3-aa32-b13e7f7658c4
+# ╠═fd195341-4cd5-4577-bb23-a5a062338b90
+# ╠═9d03e74b-9ec2-49a7-8bce-bffabc2b49a2
+# ╠═c02b8f3a-012b-402e-bcbf-127de67dc381
+# ╠═64f8c17b-7f1b-4abe-96d1-28de47b14787
+# ╠═9e94dc41-0719-4da3-aa32-b13e7f7658c4
 # ╟─828be7e3-10a7-456e-b808-caf40e2a5e5a
-# ╟─9db04e02-47ec-4410-bca1-76634c04d2e0
+# ╠═9db04e02-47ec-4410-bca1-76634c04d2e0
 # ╟─b33cd29e-7a0e-4747-aa4f-16f40f1bea72
 # ╟─7dda83db-4263-4851-b97e-62b9f5fa6d17
-# ╟─3a1fec8b-05f4-4db3-9ec4-6c6333cd3a53
-# ╟─c2f189ca-18fe-4bfc-ba2a-327c1c05adb6
-# ╟─3824b2f4-f792-4e89-8750-7950417e8493
+# ╠═3824b2f4-f792-4e89-8750-7950417e8493
 # ╟─e97fe6fa-9ae7-49ae-aa4f-5af1ada736b2
-# ╟─f66d9ef4-8f6b-42dc-8c06-2c208ae2d962
+# ╠═f66d9ef4-8f6b-42dc-8c06-2c208ae2d962
 # ╟─40ff487e-bb9e-4d3c-84e2-31f8456ebede
 # ╠═92254584-fdbe-4f90-8b63-a5389166c141
 # ╠═8e7399e4-776e-4410-849e-5e719d324002
