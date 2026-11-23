@@ -25,6 +25,7 @@ makedocs(;
                                     "Practical - Gradient echo" => "4-1-pulseq_practical.md",
                                     "Simulation and reconstruction" => "4-3-simulation_reconstruction.md",
                                     "Homework - Multi-spin echo" => "4-2-mse_homework.md",
+                                    "Practical - EPI" => "4-4-epi_practical.md",
                                     ],
                                     "Motion Artefacts" => ["Intra-scan motion" => "5-1-motion_correction.md"],
 
